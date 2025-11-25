@@ -104,6 +104,8 @@ export const communityFeedService = {
     productLink?: string,
     targetAudience?: 'all' | 'free' | 'pro' | 'vip' | 'pro-vip'
   ): Promise<string> {
+    // NOTE: Reputation is a loyalty/trust badge system - it never blocks users
+    // This check will always return { allowed: true }
     const postingCheck = await reputationService.checkPostingAllowed(userId);
     if (!postingCheck.allowed) {
       throw new Error(postingCheck.reason || 'Posting not allowed');

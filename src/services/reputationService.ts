@@ -1,3 +1,22 @@
+/**
+ * REPUTATION SERVICE - LOYALTY & TRUST BADGE SYSTEM
+ *
+ * PURPOSE:
+ * - Recognize and reward users who contribute positively to the community
+ * - Display trust badges to help users identify helpful community members
+ * - Track metrics like helpful posts, engagement, consistency
+ * - Award perks like highlighted badges and visibility boosts
+ *
+ * IMPORTANT - WHAT IT DOES NOT DO:
+ * - Does NOT restrict posting or messaging abilities
+ * - Does NOT block users from using platform features
+ * - Does NOT enforce cooldowns or rate limits
+ * - Does NOT prevent account access
+ *
+ * Think of it as a "loyalty program" or "verified badge" system that REWARDS
+ * good behavior, not a moderation system that RESTRICTS bad behavior.
+ */
+
 import {
   collection,
   doc,
@@ -249,70 +268,21 @@ export const reputationService = {
   },
 
   calculateRestrictions(score: number): UserReputation['restrictions'] {
-    if (score < 20) {
-      return {
-        cooldownUntil: Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000)),
-        postingLimited: true,
-        maxPostsPerHour: 2
-      };
-    } else if (score < 40) {
-      return {
-        cooldownUntil: null,
-        postingLimited: true,
-        maxPostsPerHour: 5
-      };
-    } else {
-      return {
-        cooldownUntil: null,
-        postingLimited: false,
-        maxPostsPerHour: score >= 75 ? 50 : 20
-      };
-    }
+    // REPUTATION IS A LOYALTY/TRUST BADGE SYSTEM ONLY
+    // It does NOT restrict posting or messaging - it only rewards good community members
+    // All users have unlimited posting regardless of reputation
+    return {
+      cooldownUntil: null,
+      postingLimited: false,
+      maxPostsPerHour: 999 // Effectively unlimited
+    };
   },
 
   async checkPostingAllowed(userId: string): Promise<{ allowed: boolean; reason?: string; waitTime?: number }> {
-    try {
-      const reputation = await this.getReputation(userId);
-      if (!reputation) {
-        return { allowed: true };
-      }
-
-    if (reputation.restrictions.cooldownUntil) {
-      const now = Date.now();
-      const cooldownEnd = reputation.restrictions.cooldownUntil.toMillis();
-
-      if (now < cooldownEnd) {
-        return {
-          allowed: false,
-          reason: 'Your account is in cooldown mode due to low reputation score.',
-          waitTime: Math.ceil((cooldownEnd - now) / 1000 / 60)
-        };
-      }
-    }
-
-    if (reputation.restrictions.postingLimited) {
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      const recentPostsQuery = query(
-        collection(db, 'community_posts'),
-        where('userId', '==', userId),
-        where('createdAt', '>=', Timestamp.fromDate(oneHourAgo))
-      );
-      const recentPosts = await getDocs(recentPostsQuery);
-
-      if (recentPosts.size >= reputation.restrictions.maxPostsPerHour) {
-        return {
-          allowed: false,
-          reason: `You've reached your posting limit of ${reputation.restrictions.maxPostsPerHour} posts per hour. Improve your reputation to post more frequently.`,
-          waitTime: 60
-        };
-      }
-    }
-
+    // REPUTATION IS A LOYALTY/TRUST BADGE SYSTEM ONLY
+    // It does NOT restrict posting or messaging - it only rewards good community members
+    // Always allow posting regardless of reputation score
     return { allowed: true };
-    } catch (error) {
-      console.error('Error checking posting allowed:', error);
-      return { allowed: true };
-    }
   },
 
   async manualOverride(

@@ -61,7 +61,8 @@ export function checkFeatureAccess(user: User | null, feature: Feature): Feature
     };
   }
 
-  if (user.role === 'mentor' || user.role === 'governor') {
+  const staffRoles = ['mentor', 'governor', 'coach', 'moderator', 'trainer', 'communicator', 'finance'];
+  if (staffRoles.includes(user.role)) {
     return {
       allowed: true,
       requiresPlan: null
@@ -89,7 +90,8 @@ export function checkFeatureAccess(user: User | null, feature: Feature): Feature
 export function getAvailableFeatures(user: User | null): Feature[] {
   if (!user) return [];
 
-  if (user.role === 'mentor' || user.role === 'governor') {
+  const staffRoles = ['mentor', 'governor', 'coach', 'moderator', 'trainer', 'communicator', 'finance'];
+  if (staffRoles.includes(user.role)) {
     return Object.keys(FEATURE_REQUIREMENTS) as Feature[];
   }
 
@@ -102,7 +104,8 @@ export function getAvailableFeatures(user: User | null): Feature[] {
 export function getLockedFeatures(user: User | null): Feature[] {
   if (!user) return Object.keys(FEATURE_REQUIREMENTS) as Feature[];
 
-  if (user.role === 'mentor' || user.role === 'governor') {
+  const staffRoles = ['mentor', 'governor', 'coach', 'moderator', 'trainer', 'communicator', 'finance'];
+  if (staffRoles.includes(user.role)) {
     return [];
   }
 

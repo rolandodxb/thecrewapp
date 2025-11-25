@@ -24,7 +24,7 @@ function corsResponse(body: string | object | null, status = 200) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, X-Client-Info',
   };
 
   if (status === 204) {
@@ -50,10 +50,12 @@ Deno.serve(async (req) => {
       return corsResponse({ error: 'Method not allowed' }, 405);
     }
 
-    // Get authorization header
+    // Get authorization or apikey header for authentication
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.error('Missing or invalid authorization header');
+    const apiKey = req.headers.get('apikey');
+
+    if (!authHeader && !apiKey) {
+      console.error('Missing authentication headers');
       return corsResponse({ error: 'Unauthorized - Missing authentication' }, 401);
     }
 

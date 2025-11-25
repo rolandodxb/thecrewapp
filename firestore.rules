@@ -128,31 +128,36 @@ service cloud.firestore {
     // - Only governors and moderators can delete any post
     ///////////////////////////////////////////////////////////////////////////
     match /community_posts/{postId} {
-      allow read, list: if request.auth != null;
 
-      // Anyone authenticated can create a post
-      allow create: if request.auth != null &&
-        request.resource.data.userId == request.auth.uid;
+  // Everyone logged in can read & list posts
+  allow read, list: if isAuthenticated();
 
-      // Post owner can update their own content, or staff can moderate
-      // Any authenticated user can update view tracking and reaction/comment counts
-      allow update: if request.auth != null && (
-        resource.data.userId == request.auth.uid ||
-        isModerator()
-      );
+  // ✅ All authenticated users can create posts (students included)
+  // Ensure they can only create posts with THEIR OWN userId
+  allow create: if isAuthenticated() &&
+    request.resource.data.userId == request.auth.uid;
 
-      // Anyone can update counter fields for reactions, comments, and views
-      allow update: if request.auth != null &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactionsCount']) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount']) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount']) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount', 'updatedAt']);
+  // User can edit their own post OR a moderator can update it
+  allow update: if isAuthenticated() && (
+    resource.data.userId == request.auth.uid ||
+    isModerator()
+  );
 
-      // Users can delete their own posts, or governors and moderators can delete any post
-      allow delete: if request.auth != null && (
-        resource.data.userId == request.auth.uid ||
-        isModerator()
-      );
+  // Allow safe non-destructive counter updates by any logged-in user
+  allow update: if isAuthenticated() &&
+    (
+      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactionsCount']) ||
+      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount']) ||
+      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy','viewsCount']) ||
+      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy','viewsCount','updatedAt'])
+    );
+
+  // User can delete their own post, or moderator can delete
+  allow delete: if isAuthenticated() && (
+    resource.data.userId == request.auth.uid ||
+    isModerator()
+  );
+
     }
 
     match /community_comments/{commentId} {
@@ -1318,8 +1323,7 @@ service cloud.firestore {
         request.resource.data.email.matches('.*@.*\\..*') &&
         request.resource.data.created_at is timestamp;
 
-      // Allow public read for duplicate checking (query)
-      // Governors can read all entries
+      // Only governors can read waitlist entries
       allow read, list: if true;
 
       // Only governors can update waitlist entries (for approvals)

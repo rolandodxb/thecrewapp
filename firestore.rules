@@ -11,7 +11,8 @@ service cloud.firestore {
     }
 
     function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let userData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return userData != null ? userData : {};
     }
 
     function isGovernor() {
@@ -1373,6 +1374,33 @@ service cloud.firestore {
       );
 
       // No one can delete reputation
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MESSAGE MENTIONS (@mentions in chat)
+    ///////////////////////////////////////////////////////////////////////////
+    match /message_mentions/{mentionId} {
+      // Users can read their own mentions
+      allow read: if isAuthenticated() && (
+        resource.data.mentionedUserId == request.auth.uid ||
+        resource.data.senderId == request.auth.uid ||
+        isModerator()
+      );
+
+      // Users can list their own mentions
+      allow list: if isAuthenticated();
+
+      // System creates mentions when users send messages
+      allow create: if isAuthenticated();
+
+      // Users can update their own mentions (mark as read)
+      allow update: if isAuthenticated() && (
+        resource.data.mentionedUserId == request.auth.uid ||
+        isModerator()
+      );
+
+      // No one can delete mentions
       allow delete: if false;
     }
   }

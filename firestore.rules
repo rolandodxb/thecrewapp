@@ -15,34 +15,41 @@ service cloud.firestore {
     }
 
     function getUserData() {
-      return userDocExists() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : { role: 'student' };
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isGovernor() {
-      return isAuthenticated() && userDocExists() && getUserData().role == 'governor';
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             getUserData().role == 'governor';
     }
 
     function hasRole(role) {
-      return isAuthenticated() && userDocExists() && getUserData().role == role;
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             getUserData().role == role;
     }
 
     function hasPermission(permission) {
-      return isAuthenticated() && userDocExists() &&
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              exists(/databases/$(database)/documents/governorRoles/$(getUserData().role)) &&
              get(/databases/$(database)/documents/governorRoles/$(getUserData().role)).data.permissions[permission] == true;
     }
 
     function isModerator() {
-      return isAuthenticated() && userDocExists() && (
-        getUserData().role == 'governor' ||
-        getUserData().role == 'moderator' ||
-        (exists(/databases/$(database)/documents/governorRoles/$(getUserData().role)) &&
-         get(/databases/$(database)/documents/governorRoles/$(getUserData().role)).data.permissions['moderateContent'] == true)
-      );
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             (getUserData().role == 'governor' ||
+              getUserData().role == 'moderator' ||
+              (exists(/databases/$(database)/documents/governorRoles/$(getUserData().role)) &&
+               get(/databases/$(database)/documents/governorRoles/$(getUserData().role)).data.permissions['moderateContent'] == true));
     }
 
     function isStaff() {
-      return isAuthenticated() && userDocExists() && getUserData().role in ['governor', 'mentor', 'coach', 'finance', 'moderator', 'trainer', 'communicator'];
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             getUserData().role in ['governor', 'mentor', 'coach', 'finance', 'moderator', 'trainer', 'communicator'];
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -315,7 +322,7 @@ service cloud.firestore {
       allow delete: if false;
 
       match /messages/{messageId} {
-        // Allow read if it's public room (no additional checks needed)
+        // Allow read if authenticated
         allow read: if isAuthenticated();
 
         // Allow create if authenticated and is the sender
@@ -325,10 +332,12 @@ service cloud.firestore {
         // Allow update for reactions, likes, and readBy
         allow update: if isAuthenticated();
 
-        allow delete: if isAuthenticated() && (
-          request.auth.uid != null ||
-          (userDocExists() && (isGovernor() || hasPermission('manageContent')))
-        );
+        // Allow delete only for governors with existing user docs
+        allow delete: if isAuthenticated() &&
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'governor' ||
+           (exists(/databases/$(database)/documents/governorRoles/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)) &&
+            get(/databases/$(database)/documents/governorRoles/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)).data.permissions['manageContent'] == true));
       }
     }
 

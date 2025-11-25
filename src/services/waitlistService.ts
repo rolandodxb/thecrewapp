@@ -1,4 +1,5 @@
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/firebase';
+import { collection, addDoc, getDocs, updateDoc, doc, query, orderBy, where, Timestamp } from 'firebase/firestore';
 
 export interface WaitlistEntry {
   id: string;
@@ -13,17 +14,22 @@ export interface WaitlistEntry {
 export const waitlistService = {
   async getAllEntries(): Promise<WaitlistEntry[]> {
     try {
-      const { data, error } = await supabase
-        .from('waitlist')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const waitlistRef = collection(db, 'waitlist');
+      const q = query(waitlistRef, orderBy('created_at', 'desc'));
+      const snapshot = await getDocs(q);
 
-      if (error) {
-        console.error('Error fetching waitlist entries:', error);
-        return [];
-      }
-
-      return data || [];
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          name: data.name,
+          email: data.email,
+          created_at: data.created_at?.toDate?.()?.toISOString() || new Date().toISOString(),
+          approved: data.approved || false,
+          approved_at: data.approved_at?.toDate?.()?.toISOString() || null,
+          approved_by: data.approved_by || null,
+        };
+      });
     } catch (err) {
       console.error('Unexpected error fetching waitlist:', err);
       return [];
@@ -32,60 +38,70 @@ export const waitlistService = {
 
   async addToWaitlist(name: string, email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
-        .from('waitlist')
-        .insert([{ name, email }]);
+      // Check if email already exists
+      const waitlistRef = collection(db, 'waitlist');
+      const q = query(waitlistRef, where('email', '==', email));
+      const snapshot = await getDocs(q);
 
-      if (error) {
-        if (error.code === '23505') {
-          return { success: false, error: 'This email is already on the waitlist.' };
-        }
-        return { success: false, error: 'Failed to join waitlist. Please try again.' };
+      if (!snapshot.empty) {
+        return { success: false, error: 'This email is already on the waitlist.' };
       }
 
+      // Add new entry
+      await addDoc(waitlistRef, {
+        name,
+        email,
+        created_at: Timestamp.now(),
+        approved: false,
+        approved_at: null,
+        approved_by: null,
+      });
+
       return { success: true };
-    } catch {
+    } catch (err) {
+      console.error('Error adding to waitlist:', err);
       return { success: false, error: 'An unexpected error occurred. Please try again.' };
     }
   },
 
   async approveEntry(id: string, approvedBy: string): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('waitlist')
-        .update({
-          approved: true,
-          approved_at: new Date().toISOString(),
-          approved_by: approvedBy
-        })
-        .eq('id', id);
+      const entryRef = doc(db, 'waitlist', id);
+      await updateDoc(entryRef, {
+        approved: true,
+        approved_at: Timestamp.now(),
+        approved_by: approvedBy
+      });
 
-      return !error;
-    } catch {
+      return true;
+    } catch (err) {
+      console.error('Error approving entry:', err);
       return false;
     }
   },
 
   async verifyStaffCode(code: string): Promise<boolean> {
     try {
-      const { data, error } = await supabase
-        .from('staff_access_codes')
-        .select('*')
-        .eq('code', code)
-        .eq('is_active', true)
-        .maybeSingle();
+      const codesRef = collection(db, 'staff_access_codes');
+      const q = query(codesRef, where('code', '==', code), where('is_active', '==', true));
+      const snapshot = await getDocs(q);
 
-      if (error || !data) {
+      if (snapshot.empty) {
         return false;
       }
 
-      await supabase
-        .from('staff_access_codes')
-        .update({ used_count: data.used_count + 1 })
-        .eq('id', data.id);
+      const docData = snapshot.docs[0];
+      const data = docData.data();
+
+      // Update used count
+      const codeRef = doc(db, 'staff_access_codes', docData.id);
+      await updateDoc(codeRef, {
+        current_uses: (data.current_uses || 0) + 1
+      });
 
       return true;
-    } catch {
+    } catch (err) {
+      console.error('Error verifying staff code:', err);
       return false;
     }
   }

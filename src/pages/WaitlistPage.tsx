@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, User, CheckCircle, Loader } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { waitlistService } from '../services/waitlistService';
 
 export default function WaitlistPage() {
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);

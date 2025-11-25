@@ -1318,8 +1318,9 @@ service cloud.firestore {
         request.resource.data.email.matches('.*@.*\\..*') &&
         request.resource.data.created_at is timestamp;
 
-      // Only governors can read waitlist entries
-      allow read, list: if isAuthenticated() && isGovernor();
+      // Allow public read for duplicate checking (query)
+      // Governors can read all entries
+      allow read, list: if true;
 
       // Only governors can update waitlist entries (for approvals)
       allow update: if isAuthenticated() && isGovernor();

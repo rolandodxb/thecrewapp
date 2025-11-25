@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Camera, X, Plus, Users, CheckCircle, Clock, DollarSign, Image as ImageIcon, QrCode, ChevronDown, ChevronUp, TrendingUp, Calendar, Ticket } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BrowserQRCodeReader } from '@zxing/library';
 import { useApp } from '../context/AppContext';
 import {
   createActivity,
@@ -23,6 +24,8 @@ export default function StaffActivityManagementPage() {
   const [allRegistrations, setAllRegistrations] = useState<ActivityRegistration[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const codeReaderRef = useRef<BrowserQRCodeReader | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -81,6 +84,9 @@ export default function StaffActivityManagementPage() {
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (codeReaderRef.current) {
+        codeReaderRef.current.reset();
       }
     };
   }, []);
@@ -147,28 +153,50 @@ export default function StaffActivityManagementPage() {
 
   const startScanning = async (activityId: string) => {
     setScanningActivity(activityId);
+    setIsScanning(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
+      if (!codeReaderRef.current) {
+        codeReaderRef.current = new BrowserQRCodeReader();
       }
+
+      const videoInputDevices = await codeReaderRef.current.listVideoInputDevices();
+      const selectedDeviceId = videoInputDevices[0]?.deviceId;
+
+      if (!selectedDeviceId) {
+        throw new Error('No camera found');
+      }
+
+      await codeReaderRef.current.decodeFromVideoDevice(
+        selectedDeviceId,
+        videoRef.current!,
+        (result, error) => {
+          if (result) {
+            handleScanQR(result.getText());
+          }
+          if (error && !(error.name === 'NotFoundException')) {
+            console.error('QR scan error:', error);
+          }
+        }
+      );
     } catch (error) {
       console.error('Camera error:', error);
       alert('Unable to access camera. Please grant camera permissions.');
       setScanningActivity(null);
+      setIsScanning(false);
     }
   };
 
   const stopScanning = () => {
+    if (codeReaderRef.current) {
+      codeReaderRef.current.reset();
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     setScanningActivity(null);
     setScanResult(null);
+    setIsScanning(false);
   };
 
   const handleScanQR = async (qrData: string) => {

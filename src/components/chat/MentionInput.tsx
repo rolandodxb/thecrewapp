@@ -73,30 +73,26 @@ export default function MentionInput({
   }, [value]);
 
   const loadConversationMembers = async () => {
-    if (conversationMembers.length === 0) return;
-
     try {
-      const userProfiles: UserProfile[] = [];
+      const q = query(
+        collection(db, 'users'),
+        limit(20)
+      );
 
-      for (const userId of conversationMembers.slice(0, 10)) {
-        const userDoc = await getDoc(doc(db, 'users', userId));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          userProfiles.push({
-            uid: userId,
-            name: userData.name || 'Unknown',
-            email: userData.email || '',
-            photoURL: userData.photoURL,
-            bio: userData.bio,
-            role: userData.role,
-            plan: userData.plan,
-          });
-        }
-      }
+      const snapshot = await getDocs(q);
+      const users: UserProfile[] = snapshot.docs.map(doc => ({
+        uid: doc.id,
+        name: doc.data().name || 'Unknown',
+        email: doc.data().email || '',
+        photoURL: doc.data().photoURL,
+        bio: doc.data().bio,
+        role: doc.data().role,
+        plan: doc.data().plan,
+      }));
 
-      setSuggestions(userProfiles);
+      setSuggestions(users);
     } catch (error) {
-      console.error('Error loading conversation members:', error);
+      console.error('Error loading users:', error);
     }
   };
 

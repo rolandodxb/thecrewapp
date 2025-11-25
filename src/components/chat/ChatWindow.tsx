@@ -1,6 +1,7 @@
-import { MessageCircle, ArrowLeft, Shield } from 'lucide-react';
+import { MessageCircle, ArrowLeft, Shield, AtSign } from 'lucide-react';
 import { Conversation, Message } from '../../services/communityChatService';
-import ChatInput from './ChatInput';
+import { useState } from 'react';
+import MentionInput from './MentionInput';
 import MessageList from './MessageList';
 
 interface ChatWindowProps {
@@ -18,6 +19,7 @@ interface ChatWindowProps {
   onReact?: (messageId: string, emoji: string) => void;
   onEdit?: (messageId: string, newContent: string) => void;
   onReport?: (messageId: string) => void;
+  onViewMentions?: () => void;
 }
 
 export default function ChatWindow({
@@ -35,7 +37,9 @@ export default function ChatWindow({
   onReact,
   onEdit,
   onReport,
+  onViewMentions,
 }: ChatWindowProps) {
+  const [messageText, setMessageText] = useState('');
   if (!conversation) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -74,6 +78,15 @@ export default function ChatWindow({
             {conversation.type === 'marketplace' && 'Marketplace'}
           </p>
         </div>
+        {onViewMentions && (
+          <button
+            onClick={onViewMentions}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors group relative"
+            title="View your mentions"
+          >
+            <AtSign className="w-5 h-5 text-gray-600 group-hover:text-blue-600" />
+          </button>
+        )}
       </div>
 
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 px-3 py-2 flex-shrink-0">
@@ -100,12 +113,22 @@ export default function ChatWindow({
       </div>
 
       <div className="flex-shrink-0 backdrop-blur-sm bg-white/10 border-t border-white/20">
-        <ChatInput
-          onSend={onSendMessage}
-          onTyping={onTyping}
-          disabled={sending}
-          placeholder={`Message ${conversation.title}`}
-        />
+        <div className="p-2">
+          <MentionInput
+            value={messageText}
+            onChange={setMessageText}
+            onSubmit={() => {
+              if (messageText.trim()) {
+                onSendMessage(messageText);
+                setMessageText('');
+              }
+            }}
+            onTyping={onTyping}
+            disabled={sending}
+            placeholder={`Message ${conversation.title} (type @ to mention)`}
+            conversationMembers={conversation.members || []}
+          />
+        </div>
       </div>
     </div>
   );

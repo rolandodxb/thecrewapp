@@ -9,6 +9,7 @@ import FeatureLock from '../components/FeatureLock';
 import ChatSidebar from '../components/chat/ChatSidebar';
 import ChatWindow from '../components/chat/ChatWindow';
 import CreateConversationDropdown from '../components/chat/CreateConversationDropdown';
+import MentionsView from '../components/chat/MentionsView';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useTypingIndicator } from '../hooks/useTypingIndicator';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -23,6 +24,7 @@ export default function CommunityPage() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [sending, setSending] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showMentions, setShowMentions] = useState(false);
 
   const { messages, loading, hasMore, loadMoreMessages } = useChatMessages(
     selectedConversation?.id || null
@@ -264,6 +266,7 @@ export default function CommunityPage() {
             onReact={handleReaction}
             onEdit={handleEditMessage}
             onReport={handleReportMessage}
+            onViewMentions={() => setShowMentions(true)}
           />
         )}
       </div>
@@ -378,6 +381,7 @@ export default function CommunityPage() {
               onReact={handleReaction}
               onEdit={handleEditMessage}
               onReport={handleReportMessage}
+              onViewMentions={() => setShowMentions(true)}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center">
@@ -394,6 +398,10 @@ export default function CommunityPage() {
           )}
         </div>
       </div>
+
+      {showMentions && (
+        <MentionsView userId={currentUser.uid} onClose={() => setShowMentions(false)} />
+      )}
     </>
   );
 }

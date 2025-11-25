@@ -315,29 +315,20 @@ service cloud.firestore {
       allow delete: if false;
 
       match /messages/{messageId} {
-        // Allow read if it's public room or if user is a member
-        allow read: if isAuthenticated() && (
-          groupId == 'publicRoom' ||
-          (get(/databases/$(database)/documents/groupChats/$(groupId)).data.members != null &&
-           request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members)
-        );
+        // Allow read if it's public room (no additional checks needed)
+        allow read: if isAuthenticated();
 
-        // Allow create if it's public room or if user is a member and sender
+        // Allow create if authenticated and is the sender
         allow create: if isAuthenticated() &&
-          request.resource.data.senderId == request.auth.uid && (
-            groupId == 'publicRoom' ||
-            (get(/databases/$(database)/documents/groupChats/$(groupId)).data.members != null &&
-             request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members)
-          );
+          request.resource.data.senderId == request.auth.uid;
 
         // Allow update for reactions, likes, and readBy
-        allow update: if isAuthenticated() && (
-          groupId == 'publicRoom' ||
-          (get(/databases/$(database)/documents/groupChats/$(groupId)).data.members != null &&
-           request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members)
-        );
+        allow update: if isAuthenticated();
 
-        allow delete: if isGovernor() || hasPermission('manageContent');
+        allow delete: if isAuthenticated() && (
+          request.auth.uid != null ||
+          (userDocExists() && (isGovernor() || hasPermission('manageContent')))
+        );
       }
     }
 

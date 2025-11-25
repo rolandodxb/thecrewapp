@@ -183,8 +183,6 @@ Deno.serve(async (req) => {
 
     console.log(`Creating checkout session with price_id: ${price_id}, mode: ${mode}, customer: ${customerId}`);
 
-    // Note: Currency is determined by the Price object in Stripe Dashboard
-    // Make sure all prices are created in USD to avoid "card doesn't support currency" errors
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],

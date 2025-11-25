@@ -143,31 +143,24 @@ Deno.serve(async (req) => {
 
     const amountInCents = Math.round(amount * 100);
 
-    // Always use USD for Stripe to avoid "card doesn't support this currency" errors
-    // Store original currency in metadata for record keeping
     const originalCurrency = currency.toLowerCase();
     const stripeCurrency = 'usd';
 
-    // If original currency is not USD, we'll process in USD
-    // Frontend should handle currency display/conversion if needed
     let stripeAmount = amountInCents;
 
-    // Simple currency conversion to USD (these are approximate rates)
-    // In production, you'd fetch real-time rates from an API
     const conversionRates: { [key: string]: number } = {
       'usd': 1.0,
-      'aed': 0.27,  // 1 AED = 0.27 USD
-      'eur': 1.10,  // 1 EUR = 1.10 USD
-      'gbp': 1.27,  // 1 GBP = 1.27 USD
-      'aud': 0.65,  // 1 AUD = 0.65 USD
-      'cad': 0.72,  // 1 CAD = 0.72 USD
-      'jpy': 0.0067, // 1 JPY = 0.0067 USD
-      'inr': 0.012, // 1 INR = 0.012 USD
-      'sgd': 0.74,  // 1 SGD = 0.74 USD
+      'aed': 0.27,
+      'eur': 1.10,
+      'gbp': 1.27,
+      'aud': 0.65,
+      'cad': 0.72,
+      'jpy': 0.0067,
+      'inr': 0.012,
+      'sgd': 0.74,
     };
 
     if (originalCurrency !== 'usd' && conversionRates[originalCurrency]) {
-      // Convert to USD
       stripeAmount = Math.round((amount * conversionRates[originalCurrency]) * 100);
       console.log(`Converting ${amount} ${originalCurrency.toUpperCase()} to ${stripeAmount / 100} USD`);
     }

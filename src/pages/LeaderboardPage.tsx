@@ -17,18 +17,18 @@ interface UserWithDetails extends UserPoints {
 }
 
 interface GroupedUsers {
-  admins: UserWithDetails[];
-  supportAgents: UserWithDetails[];
+  governors: UserWithDetails[];
   mentors: UserWithDetails[];
+  support: UserWithDetails[];
   students: UserWithDetails[];
 }
 
 export default function LeaderboardPage() {
   const navigate = useNavigate();
   const [groupedUsers, setGroupedUsers] = useState<GroupedUsers>({
-    admins: [],
-    supportAgents: [],
+    governors: [],
     mentors: [],
+    support: [],
     students: []
   });
   const [loading, setLoading] = useState(true);
@@ -66,28 +66,28 @@ export default function LeaderboardPage() {
       );
 
       const grouped: GroupedUsers = {
-        admins: [],
-        supportAgents: [],
+        governors: [],
         mentors: [],
+        support: [],
         students: []
       };
 
       usersWithDetails.forEach(user => {
         const role = user.role.toLowerCase();
-        if (role === 'governor' || role === 'admin') {
-          grouped.admins.push(user);
-        } else if (role === 'support' || role === 'support-agent') {
-          grouped.supportAgents.push(user);
-        } else if (role === 'mentor' || role === 'coach') {
+        if (role === 'governor') {
+          grouped.governors.push(user);
+        } else if (role === 'mentor') {
           grouped.mentors.push(user);
-        } else {
+        } else if (role === 'support') {
+          grouped.support.push(user);
+        } else if (role === 'student') {
           grouped.students.push(user);
         }
       });
 
-      grouped.admins.sort((a, b) => b.total_points - a.total_points);
-      grouped.supportAgents.sort((a, b) => b.total_points - a.total_points);
+      grouped.governors.sort((a, b) => b.total_points - a.total_points);
       grouped.mentors.sort((a, b) => b.total_points - a.total_points);
+      grouped.support.sort((a, b) => b.total_points - a.total_points);
       grouped.students.sort((a, b) => b.total_points - a.total_points);
 
       setGroupedUsers(grouped);
@@ -114,28 +114,31 @@ export default function LeaderboardPage() {
 
   const getRoleDisplay = (role: string) => {
     const roleLower = role.toLowerCase();
-    if (roleLower === 'governor' || roleLower === 'admin') {
+    if (roleLower === 'governor') {
       return { label: 'Governor', color: 'bg-red-100 text-red-900', icon: '👑' };
     }
-    if (roleLower === 'support' || roleLower === 'support-agent') {
-      return { label: 'Support Agent', color: 'bg-blue-100 text-blue-900', icon: '💬' };
-    }
-    if (roleLower === 'mentor' || roleLower === 'coach') {
+    if (roleLower === 'mentor') {
       return { label: 'Mentor', color: 'bg-purple-100 text-purple-900', icon: '⭐' };
     }
-    return { label: 'Student', color: 'bg-green-100 text-green-900', icon: '🎓' };
+    if (roleLower === 'support') {
+      return { label: 'Support', color: 'bg-blue-100 text-blue-900', icon: '💬' };
+    }
+    if (roleLower === 'student') {
+      return { label: 'Student', color: 'bg-green-100 text-green-900', icon: '🎓' };
+    }
+    return { label: role, color: 'bg-gray-100 text-gray-900', icon: '👤' };
   };
 
   const getRoleIcon = (role: string) => {
     const roleLower = role.toLowerCase();
-    if (roleLower === 'governor' || roleLower === 'admin') {
+    if (roleLower === 'governor') {
       return <Shield className="w-5 h-5 text-[#D71920]" />;
     }
-    if (roleLower === 'support' || roleLower === 'support-agent') {
-      return <Mail className="w-5 h-5 text-blue-600" />;
-    }
-    if (roleLower === 'mentor' || roleLower === 'coach') {
+    if (roleLower === 'mentor') {
       return <Star className="w-5 h-5 text-purple-600" />;
+    }
+    if (roleLower === 'support') {
+      return <Mail className="w-5 h-5 text-blue-600" />;
     }
     return null;
   };
@@ -339,8 +342,8 @@ export default function LeaderboardPage() {
     );
   }
 
-  const totalUsers = groupedUsers.admins.length + groupedUsers.supportAgents.length +
-                     groupedUsers.mentors.length + groupedUsers.students.length;
+  const totalUsers = groupedUsers.governors.length + groupedUsers.mentors.length +
+                     groupedUsers.support.length + groupedUsers.students.length;
 
   return (
     <div className="min-h-screen p-4 md:p-6">
@@ -376,10 +379,10 @@ export default function LeaderboardPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            {renderSection(groupedUsers.admins, 'Admins', '👑', 'from-red-500 to-red-600', 0)}
-            {renderSection(groupedUsers.supportAgents, 'Support Agents', '💬', 'from-blue-500 to-blue-600', groupedUsers.admins.length)}
-            {renderSection(groupedUsers.mentors, 'Mentors', '⭐', 'from-purple-500 to-purple-600', groupedUsers.admins.length + groupedUsers.supportAgents.length)}
-            {renderSection(groupedUsers.students, 'Students', '🎓', 'from-green-500 to-green-600', groupedUsers.admins.length + groupedUsers.supportAgents.length + groupedUsers.mentors.length)}
+            {renderSection(groupedUsers.governors, 'Governors', '👑', 'from-red-500 to-red-600', 0)}
+            {renderSection(groupedUsers.mentors, 'Mentors', '⭐', 'from-purple-500 to-purple-600', groupedUsers.governors.length)}
+            {renderSection(groupedUsers.support, 'Support', '💬', 'from-blue-500 to-blue-600', groupedUsers.governors.length + groupedUsers.mentors.length)}
+            {renderSection(groupedUsers.students, 'Students', '🎓', 'from-green-500 to-green-600', groupedUsers.governors.length + groupedUsers.mentors.length + groupedUsers.support.length)}
           </div>
         )}
       </div>

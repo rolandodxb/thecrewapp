@@ -85,22 +85,7 @@ export default function SocialProfilePage() {
         );
         setPosts(userPosts);
 
-        // Load achievements from course_enrollments collection
-        const enrollmentsQuery = query(
-          collection(db, 'course_enrollments'),
-          where('user_id', '==', targetUserId)
-        );
-        const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
-
-        let modulesCompleted = 0;
-        enrollmentsSnapshot.docs.forEach(doc => {
-          const data = doc.data();
-          if (data.completed) {
-            modulesCompleted++;
-          }
-        });
-
-        // Load total points from user_points collection
+        // Load total points from user_points collection (all roles)
         const pointsQuery = query(
           collection(db, 'user_points'),
           where('user_id', '==', targetUserId)
@@ -108,28 +93,55 @@ export default function SocialProfilePage() {
         const pointsSnapshot = await getDocs(pointsQuery);
         const totalPoints = pointsSnapshot.empty ? 0 : pointsSnapshot.docs[0].data().total_points || 0;
 
-        // Load certificates
-        const certificatesQuery = query(
-          collection(db, 'certificates'),
-          where('userId', '==', targetUserId)
-        );
-        const certificatesSnapshot = await getDocs(certificatesQuery);
+        // Only load detailed achievements for students
+        const userRole = userData.role.toLowerCase();
+        if (userRole === 'student') {
+          // Load achievements from course_enrollments collection
+          const enrollmentsQuery = query(
+            collection(db, 'course_enrollments'),
+            where('user_id', '==', targetUserId)
+          );
+          const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
 
-        // Count unique completed courses
-        const completedCourses = new Set<string>();
-        enrollmentsSnapshot.docs.forEach(doc => {
-          const data = doc.data();
-          if (data.completed && data.course_id) {
-            completedCourses.add(data.course_id);
-          }
-        });
+          let modulesCompleted = 0;
+          enrollmentsSnapshot.docs.forEach(doc => {
+            const data = doc.data();
+            if (data.completed) {
+              modulesCompleted++;
+            }
+          });
 
-        setStats({
-          totalPoints,
-          certificatesEarned: certificatesSnapshot.size,
-          coursesCompleted: completedCourses.size,
-          modulesCompleted
-        });
+          // Load certificates
+          const certificatesQuery = query(
+            collection(db, 'certificates'),
+            where('userId', '==', targetUserId)
+          );
+          const certificatesSnapshot = await getDocs(certificatesQuery);
+
+          // Count unique completed courses
+          const completedCourses = new Set<string>();
+          enrollmentsSnapshot.docs.forEach(doc => {
+            const data = doc.data();
+            if (data.completed && data.course_id) {
+              completedCourses.add(data.course_id);
+            }
+          });
+
+          setStats({
+            totalPoints,
+            certificatesEarned: certificatesSnapshot.size,
+            coursesCompleted: completedCourses.size,
+            modulesCompleted
+          });
+        } else {
+          // For governor, mentor, support - only show points
+          setStats({
+            totalPoints,
+            certificatesEarned: 0,
+            coursesCompleted: 0,
+            modulesCompleted: 0
+          });
+        }
       } catch (error) {
         console.error('Error loading profile:', error);
       } finally {
@@ -225,39 +237,51 @@ export default function SocialProfilePage() {
             <h2 className="text-lg md:text-xl font-bold text-gray-900">Achievements</h2>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-            <div className="liquid-card-overlay p-4 rounded-xl text-center">
-              <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
-                <Award className="w-6 h-6 text-white" />
+          {profileUser.role.toLowerCase() === 'student' ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+              <div className="liquid-card-overlay p-4 rounded-xl text-center">
+                <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+                  <Award className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-2xl font-bold text-gray-900 mb-1">{stats.totalPoints}</div>
+                <div className="text-xs text-gray-600 font-semibold">Points</div>
               </div>
-              <div className="text-2xl font-bold text-gray-900 mb-1">{stats.totalPoints}</div>
-              <div className="text-xs text-gray-600 font-semibold">Points</div>
-            </div>
 
-            <div className="liquid-card-overlay p-4 rounded-xl text-center">
-              <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-[#D71920] to-[#B91518] rounded-full flex items-center justify-center">
-                <Trophy className="w-6 h-6 text-white" />
+              <div className="liquid-card-overlay p-4 rounded-xl text-center">
+                <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-[#D71920] to-[#B91518] rounded-full flex items-center justify-center">
+                  <Trophy className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-2xl font-bold text-gray-900 mb-1">{stats.certificatesEarned}</div>
+                <div className="text-xs text-gray-600 font-semibold">Certificates</div>
               </div>
-              <div className="text-2xl font-bold text-gray-900 mb-1">{stats.certificatesEarned}</div>
-              <div className="text-xs text-gray-600 font-semibold">Certificates</div>
-            </div>
 
-            <div className="liquid-card-overlay p-4 rounded-xl text-center">
-              <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
-                <BookOpen className="w-6 h-6 text-white" />
+              <div className="liquid-card-overlay p-4 rounded-xl text-center">
+                <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
+                  <BookOpen className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-2xl font-bold text-gray-900 mb-1">{stats.coursesCompleted}</div>
+                <div className="text-xs text-gray-600 font-semibold">Courses</div>
               </div>
-              <div className="text-2xl font-bold text-gray-900 mb-1">{stats.coursesCompleted}</div>
-              <div className="text-xs text-gray-600 font-semibold">Courses</div>
-            </div>
 
-            <div className="liquid-card-overlay p-4 rounded-xl text-center">
-              <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
-                <BookOpen className="w-6 h-6 text-white" />
+              <div className="liquid-card-overlay p-4 rounded-xl text-center">
+                <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
+                  <BookOpen className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-2xl font-bold text-gray-900 mb-1">{stats.modulesCompleted}</div>
+                <div className="text-xs text-gray-600 font-semibold">Modules</div>
               </div>
-              <div className="text-2xl font-bold text-gray-900 mb-1">{stats.modulesCompleted}</div>
-              <div className="text-xs text-gray-600 font-semibold">Modules</div>
             </div>
-          </div>
+          ) : (
+            <div className="flex justify-center">
+              <div className="liquid-card-overlay p-6 rounded-xl text-center max-w-xs w-full">
+                <div className="w-16 h-16 mx-auto mb-3 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+                  <Award className="w-8 h-8 text-white" />
+                </div>
+                <div className="text-3xl font-bold text-gray-900 mb-2">{stats.totalPoints}</div>
+                <div className="text-sm text-gray-600 font-semibold">Total Points</div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="liquid-crystal-panel p-4 md:p-6">

@@ -38,15 +38,6 @@ export default function PaymentForm({
     setError('');
 
     try {
-      const isPWA = window.matchMedia('(display-mode: standalone)').matches;
-
-      if (isPWA) {
-        const currentUrl = window.location.href;
-        window.open(currentUrl, '_blank');
-        setLoading(false);
-        return;
-      }
-
       const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
         elements,
         confirmParams: {

@@ -103,14 +103,19 @@ export const reputationService = {
   },
 
   async getReputation(userId: string): Promise<UserReputation | null> {
-    const reputationRef = doc(db, 'user_reputation', userId);
-    const snapshot = await getDoc(reputationRef);
+    try {
+      const reputationRef = doc(db, 'user_reputation', userId);
+      const snapshot = await getDoc(reputationRef);
 
-    if (snapshot.exists()) {
-      return snapshot.data() as UserReputation;
+      if (snapshot.exists()) {
+        return snapshot.data() as UserReputation;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting reputation:', error);
+      return null;
     }
-
-    return null;
   },
 
   async calculateUserScore(userId: string): Promise<number> {
@@ -266,10 +271,11 @@ export const reputationService = {
   },
 
   async checkPostingAllowed(userId: string): Promise<{ allowed: boolean; reason?: string; waitTime?: number }> {
-    const reputation = await this.getReputation(userId);
-    if (!reputation) {
-      return { allowed: true };
-    }
+    try {
+      const reputation = await this.getReputation(userId);
+      if (!reputation) {
+        return { allowed: true };
+      }
 
     if (reputation.restrictions.cooldownUntil) {
       const now = Date.now();
@@ -303,6 +309,10 @@ export const reputationService = {
     }
 
     return { allowed: true };
+    } catch (error) {
+      console.error('Error checking posting allowed:', error);
+      return { allowed: true };
+    }
   },
 
   async manualOverride(

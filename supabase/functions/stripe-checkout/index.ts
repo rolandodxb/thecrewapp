@@ -50,6 +50,13 @@ Deno.serve(async (req) => {
       return corsResponse({ error: 'Method not allowed' }, 405);
     }
 
+    // Get authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('Missing or invalid authorization header');
+      return corsResponse({ error: 'Unauthorized - Missing authentication' }, 401);
+    }
+
     const { price_id, success_url, cancel_url, mode, firebase_uid } = await req.json();
 
     const error = validateParameters(
@@ -67,10 +74,12 @@ Deno.serve(async (req) => {
     }
 
     if (!firebase_uid) {
+      console.error('Firebase UID is missing from request body');
       return corsResponse({ error: 'Firebase UID is required' }, 400);
     }
 
     const userId = firebase_uid;
+    console.log(`Processing checkout for user: ${userId}`);
 
     console.log(`Looking up customer for Firebase UID: ${userId}`);
     console.log(`Price ID received: ${price_id}`);

@@ -1345,5 +1345,35 @@ service cloud.firestore {
       // No one can delete codes
       allow delete: if false;
     }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // USER REPUTATION (Reputation System)
+    ///////////////////////////////////////////////////////////////////////////
+    match /user_reputation/{userId} {
+      // Users can read their own reputation, anyone can read if public
+      allow read: if isAuthenticated() && (
+        userId == request.auth.uid ||
+        (resource.data.visibilityPublic == true) ||
+        isModerator()
+      );
+
+      // List all reputations (for leaderboard)
+      allow list: if isAuthenticated();
+
+      // System can create reputation entries
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == userId;
+
+      // Users can update their own visibility, governors can update everything
+      allow update: if isAuthenticated() && (
+        (userId == request.auth.uid &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibilityPublic'])) ||
+        isGovernor() ||
+        isModerator()
+      );
+
+      // No one can delete reputation
+      allow delete: if false;
+    }
   }
 }

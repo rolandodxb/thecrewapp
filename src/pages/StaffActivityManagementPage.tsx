@@ -155,6 +155,14 @@ export default function StaffActivityManagementPage() {
     setScanningActivity(activityId);
     setIsScanning(true);
     try {
+      // Request camera permission explicitly
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+
+      // Store the stream reference for cleanup
+      streamRef.current = stream;
+
       if (!codeReaderRef.current) {
         codeReaderRef.current = new BrowserQRCodeReader();
       }
@@ -163,7 +171,7 @@ export default function StaffActivityManagementPage() {
       const selectedDeviceId = videoInputDevices[0]?.deviceId;
 
       if (!selectedDeviceId) {
-        throw new Error('No camera found');
+        throw new Error('No camera found on this device');
       }
 
       await codeReaderRef.current.decodeFromVideoDevice(
@@ -178,9 +186,21 @@ export default function StaffActivityManagementPage() {
           }
         }
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Camera error:', error);
-      alert('Unable to access camera. Please grant camera permissions.');
+      let errorMessage = 'Unable to access camera. ';
+
+      if (error.name === 'NotAllowedError') {
+        errorMessage += 'Please grant camera permissions in your browser settings.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage += 'No camera found on this device.';
+      } else if (error.name === 'NotReadableError') {
+        errorMessage += 'Camera is already in use by another application.';
+      } else {
+        errorMessage += error.message || 'Please try again.';
+      }
+
+      alert(errorMessage);
       setScanningActivity(null);
       setIsScanning(false);
     }

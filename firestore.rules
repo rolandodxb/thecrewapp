@@ -173,13 +173,8 @@ service cloud.firestore {
       allow create: if request.auth != null &&
         request.resource.data.userId == request.auth.uid &&
         request.resource.data.postId is string &&
-        request.resource.data.userId is string &&
-        request.resource.data.userName is string &&
-        request.resource.data.userEmail is string &&
         request.resource.data.content is string &&
-        request.resource.data.content.size() > 0 &&
-        request.resource.data.createdAt is timestamp &&
-        request.resource.data.updatedAt is timestamp;
+        request.resource.data.content.size() > 0;
 
       // Comment owner can update their own comment, or staff can moderate
       // Anyone can update reactions on comments

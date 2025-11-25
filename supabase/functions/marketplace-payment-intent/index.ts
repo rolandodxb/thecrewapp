@@ -119,24 +119,38 @@ Deno.serve(async (req) => {
 
       console.log(`Created new Stripe customer ${newCustomer.id} for buyer ${firebase_buyer_uid}`);
 
-      const { error: createCustomerError } = await supabase
+      const { data: insertedCustomer, error: createCustomerError } = await supabase
         .from('stripe_customers')
         .insert({
           user_id: firebase_buyer_uid,
           customer_id: newCustomer.id,
-        });
+        })
+        .select()
+        .single();
 
       if (createCustomerError) {
-        console.error('Failed to save customer mapping', createCustomerError);
+        console.error('Failed to save customer mapping', {
+          error: createCustomerError,
+          message: createCustomerError.message,
+          details: createCustomerError.details,
+          hint: createCustomerError.hint,
+          code: createCustomerError.code
+        });
         try {
           await stripe.customers.del(newCustomer.id);
         } catch (deleteError) {
           console.error('Failed to cleanup customer:', deleteError);
         }
-        return corsResponse({ error: 'Failed to create customer mapping' }, 500);
+        return corsResponse({ 
+          error: 'Failed to create customer mapping',
+          details: createCustomerError.message,
+          hint: createCustomerError.hint,
+          code: createCustomerError.code
+        }, 500);
       }
 
       customerId = newCustomer.id;
+      console.log(`Successfully created customer mapping for ${firebase_buyer_uid}`);
     } else {
       customerId = customer.customer_id;
     }

@@ -55,7 +55,7 @@ export default function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Desktop - Full screen, no wrapper (handled completely in CommunityPage) */}
-        <div className="hidden lg:block">
+        <div className="hidden lg:block lg:h-screen lg:overflow-hidden">
           {children}
         </div>
       </>

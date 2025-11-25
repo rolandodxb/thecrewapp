@@ -230,7 +230,7 @@ export default function CommunityPage() {
   return (
     <>
       {/* Mobile View - Toggle between sidebar and chat */}
-      <div className="h-full lg:hidden">
+      <div className="h-full flex flex-col lg:hidden">
         {!selectedConversation ? (
           <ChatSidebar
             conversations={conversations}
@@ -269,7 +269,7 @@ export default function CommunityPage() {
       </div>
 
       {/* Desktop View - Full screen with sidebar */}
-      <div className="hidden lg:flex lg:fixed lg:inset-0 lg:z-10 lg:bg-gray-50">
+      <div className="hidden lg:flex lg:h-screen lg:w-screen lg:bg-gray-50">
         {/* Left sidebar with conversations and navigation */}
         <div className="w-80 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col">
           {/* Top navigation header */}

@@ -1,0 +1,1309 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    ///////////////////////////////////////////////////////////////////////////
+    // HELPER FUNCTIONS
+    ///////////////////////////////////////////////////////////////////////////
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isGovernor() {
+      return isAuthenticated() && getUserData().role == 'governor';
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+
+    function hasPermission(permission) {
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/governorRoles/$(getUserData().role)) &&
+             get(/databases/$(database)/documents/governorRoles/$(getUserData().role)).data.permissions[permission] == true;
+    }
+
+    function isModerator() {
+      return isAuthenticated() && (
+        getUserData().role == 'governor' ||
+        getUserData().role == 'moderator' ||
+        (exists(/databases/$(database)/documents/governorRoles/$(getUserData().role)) &&
+         get(/databases/$(database)/documents/governorRoles/$(getUserData().role)).data.permissions['moderateContent'] == true)
+      );
+    }
+
+    function isStaff() {
+      return isAuthenticated() && getUserData().role in ['governor', 'mentor', 'coach', 'finance', 'moderator', 'trainer', 'communicator'];
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // USERS
+    ///////////////////////////////////////////////////////////////////////////
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isGovernor() ||
+        hasPermission('manageUsers')
+      );
+      allow delete: if false;
+
+      match /twoFactorAuth/{doc} {
+        allow read, write: if isAuthenticated() && (
+          request.auth.uid == userId ||
+          isGovernor()
+        );
+      }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // NOTIFICATIONS
+    ///////////////////////////////////////////////////////////////////////////
+    match /notifications/{notificationId} {
+      allow read, update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // LOGIN ACTIVITY & DEVICE SESSIONS
+    ///////////////////////////////////////////////////////////////////////////
+    match /loginActivity/{activityId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor() ||
+        hasPermission('viewAudit')
+      );
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor()
+      );
+    }
+
+    match /deviceSessions/{sessionId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor()
+      );
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor()
+      );
+    }
+
+    match /twoFactor/{userId} {
+      allow read, write: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isGovernor()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // COMMUNITY FEED (Posts, Comments, Reactions)
+    // LAST UPDATED: 2025-11-22 - Updated permissions for community features
+    // - Anyone can create posts
+    // - Anyone can react and comment on posts
+    // - Users can delete their own posts
+    // - Only governors and moderators can delete any post
+    ///////////////////////////////////////////////////////////////////////////
+    match /community_posts/{postId} {
+      allow read, list: if request.auth != null;
+
+      // Anyone authenticated can create a post
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Post owner can update their own content, or staff can moderate
+      // Any authenticated user can update view tracking and reaction/comment counts
+      allow update: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        isModerator()
+      );
+
+      // Anyone can update counter fields for reactions, comments, and views
+      allow update: if request.auth != null &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactionsCount']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount', 'updatedAt']);
+
+      // Users can delete their own posts, or governors and moderators can delete any post
+      allow delete: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        isModerator()
+      );
+    }
+
+    match /community_comments/{commentId} {
+      allow read, list: if request.auth != null;
+
+      // Anyone authenticated can create a comment
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.postId is string &&
+        request.resource.data.userId is string &&
+        request.resource.data.userName is string &&
+        request.resource.data.userEmail is string &&
+        request.resource.data.content is string &&
+        request.resource.data.content.size() > 0 &&
+        request.resource.data.createdAt is timestamp &&
+        request.resource.data.updatedAt is timestamp;
+
+      // Comment owner can update their own comment, or staff can moderate
+      // Anyone can update reactions on comments
+      allow update: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        isModerator() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+      );
+
+      // Users can delete their own comments, or governors and moderators can delete any comment
+      allow delete: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        isModerator()
+      );
+    }
+
+    match /community_reactions/{reactionId} {
+      allow read, list: if request.auth != null;
+
+      // Anyone authenticated can create a reaction
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Users can delete their own reactions, moderators can delete any
+      allow delete: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        isModerator()
+      );
+
+      // Reactions cannot be updated, only created or deleted
+      allow update: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // CONVERSATIONS (Private 1-on-1 and Groups) - SOCIAL COMMUNITY
+    ///////////////////////////////////////////////////////////////////////////
+    match /conversations/{conversationId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
+      allow create: if isAuthenticated()
+                   && request.auth.uid in request.resource.data.members
+                   && request.resource.data.members.size() > 1;
+      allow update: if false; // Updates via callable functions only
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() &&
+                   request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members;
+        allow create: if isAuthenticated() &&
+                     request.auth.uid == request.resource.data.senderId &&
+                     request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members &&
+                     request.resource.data.keys().hasOnly(['messageId','senderId','content','contentType','attachmentRef','createdAt','deleted','reactions','readBy','replyTo','likesCount']);
+        allow update: if isAuthenticated() &&
+                     request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members &&
+                     (
+                       // Only allow updating readBy for own userId
+                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']) &&
+                        request.resource.data.readBy.keys().hasOnly([request.auth.uid]))
+                       ||
+                       // Allow updating reactions
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'likesCount'])
+                     );
+        allow delete: if false; // Deletes via callable functions only
+      }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // COMMUNITY REPORTS (Posts & Comments)
+    ///////////////////////////////////////////////////////////////////////////
+    match /community_flags/{flagId} {
+      // Anyone can create a report
+      allow create: if isAuthenticated() &&
+        request.resource.data.reporterId == request.auth.uid;
+
+      // Only governors and moderators can read and update reports
+      allow read, update: if isAuthenticated() && isModerator();
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MESSAGE REPORTS
+    ///////////////////////////////////////////////////////////////////////////
+    match /messageReports/{reportId} {
+      allow create: if isAuthenticated() && request.resource.data.reporterId == request.auth.uid;
+      allow read, update: if isAuthenticated() && (isGovernor() || hasPermission('moderateContent'));
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // PRESENCE (Read-only from client, written by Realtime DB sync)
+    ///////////////////////////////////////////////////////////////////////////
+    match /presence/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Managed by Realtime DB
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // LEADERBOARD
+    ///////////////////////////////////////////////////////////////////////////
+    match /leaderboard/{scope} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Server-side only via Cloud Functions
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MODERATION AUDIT LOG
+    ///////////////////////////////////////////////////////////////////////////
+    match /moderationAudit/{auditId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow write: if false; // Server-side only
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // GROUP CHATS (Public Room & Private Groups)
+    ///////////////////////////////////////////////////////////////////////////
+    match /groupChats/{groupId} {
+      // Allow read if it's the public room or if user is a member
+      allow read: if isAuthenticated() && (
+        groupId == 'publicRoom' ||
+        (resource.data.members != null && request.auth.uid in resource.data.members)
+      );
+
+      // Allow list for authenticated users to see available groups
+      allow list: if isAuthenticated();
+
+      // Allow create for private groups if user is in members list, or for publicRoom
+      allow create: if isAuthenticated() && (
+        groupId == 'publicRoom' ||
+        (groupId != 'publicRoom' &&
+         request.auth.uid in request.resource.data.members &&
+         request.resource.data.members.size() > 1)
+      );
+
+      // Allow updates to lastMessage for all members
+      allow update: if isAuthenticated() && (
+        groupId == 'publicRoom' ||
+        (resource.data.members != null && request.auth.uid in resource.data.members)
+      );
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        // Allow read if it's public room or if user is a member
+        allow read: if isAuthenticated() && (
+          groupId == 'publicRoom' ||
+          (get(/databases/$(database)/documents/groupChats/$(groupId)).data.members != null &&
+           request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members)
+        );
+
+        // Allow create if it's public room or if user is a member and sender
+        allow create: if isAuthenticated() &&
+          request.resource.data.senderId == request.auth.uid && (
+            groupId == 'publicRoom' ||
+            (get(/databases/$(database)/documents/groupChats/$(groupId)).data.members != null &&
+             request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members)
+          );
+
+        // Allow update for reactions, likes, and readBy
+        allow update: if isAuthenticated() && (
+          groupId == 'publicRoom' ||
+          (get(/databases/$(database)/documents/groupChats/$(groupId)).data.members != null &&
+           request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members)
+        );
+
+        allow delete: if isGovernor() || hasPermission('manageContent');
+      }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // COURSES
+    ///////////////////////////////////////////////////////////////////////////
+    match /courses/{courseId} {
+      allow read: if isAuthenticated();
+
+      allow create, update: if isAuthenticated() && (
+        hasRole('mentor') ||
+        isGovernor() ||
+        hasPermission('manageContent')
+      );
+
+      allow delete: if isAuthenticated() && (
+        resource.data.mentorId == request.auth.uid ||
+        isGovernor() ||
+        hasPermission('manageContent')
+      );
+
+      match /modules/{moduleId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated() && (
+          hasRole('mentor') ||
+          isGovernor() ||
+          hasPermission('manageContent')
+        );
+
+        match /lessons/{lessonId} {
+          allow read: if isAuthenticated();
+          allow write: if isAuthenticated() && (
+            hasRole('mentor') ||
+            isGovernor() ||
+            hasPermission('manageContent')
+          );
+        }
+      }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // AI TRAINER SESSIONS
+    ///////////////////////////////////////////////////////////////////////////
+    match /aiTrainerSessions/{sessionId} {
+      allow read, update, delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // OPEN DAY SIMULATIONS & ANSWERS
+    ///////////////////////////////////////////////////////////////////////////
+    match /open_day_simulations/{simId} {
+      allow read, update, delete: if isAuthenticated() &&
+        resource.data.user_id == request.auth.uid;
+      allow list: if isStaff();
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+    }
+
+    match /open_day_answers/{answerId} {
+      allow read, update, delete: if isAuthenticated() &&
+        resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // OPEN DAYS & RECRUITERS
+    ///////////////////////////////////////////////////////////////////////////
+    match /open_days/{openDayId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor() || hasPermission('manageContent');
+    }
+
+    match /recruiters/{recruiterId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor() || hasPermission('manageContent');
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // REPORTS
+    ///////////////////////////////////////////////////////////////////////////
+    match /reports/{reportId} {
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isStaff()
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor()
+      );
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // METRICS (Server-side only)
+    ///////////////////////////////////////////////////////////////////////////
+    match /metrics/{metricId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow write: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // SYSTEM CONTROL
+    ///////////////////////////////////////////////////////////////////////////
+    match /systemControl/{docId} {
+      allow read: if true;
+      allow write: if isGovernor() || hasPermission('manageSystem');
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // SYSTEM SETTINGS
+    ///////////////////////////////////////////////////////////////////////////
+    match /systemSettings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor() || hasPermission('manageSystem');
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // GOVERNOR ROLES
+    ///////////////////////////////////////////////////////////////////////////
+    match /governorRoles/{roleId} {
+      allow read: if isAuthenticated() && isStaff();
+      allow write: if isGovernor();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // GOVERNOR COMMANDS LOG (Server-side only)
+    ///////////////////////////////////////////////////////////////////////////
+    match /governorCommands/{docId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow write: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // AUDIT EVENTS (Server-side only)
+    ///////////////////////////////////////////////////////////////////////////
+    match /audit/{docId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow write: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // BACKUPS HISTORY (Server-side only)
+    ///////////////////////////////////////////////////////////////////////////
+    match /backups/{docId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('manageSystem'));
+      allow write: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // STRIPE COLLECTIONS (Server-side only)
+    ///////////////////////////////////////////////////////////////////////////
+    match /stripe/{collection}/{docId} {
+      allow read: if isAuthenticated() && (
+        isGovernor() ||
+        hasPermission('manageBilling') ||
+        hasRole('finance')
+      );
+      allow write: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // SUPPORT TICKETS
+    ///////////////////////////////////////////////////////////////////////////
+    match /supportTickets/{ticketId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isStaff()
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isStaff()
+      );
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && (
+          get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid ||
+          isStaff()
+        );
+        allow create: if isAuthenticated() &&
+          request.resource.data.senderId == request.auth.uid;
+        allow delete: if false;
+      }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // BUG REPORTS
+    ///////////////////////////////////////////////////////////////////////////
+    match /bugReports/{reportId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.reportedBy == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.reportedBy == request.auth.uid ||
+        isStaff()
+      );
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // UNIVERSAL GOVERNOR ACCESS (Lowest Priority - Catch All)
+    ///////////////////////////////////////////////////////////////////////////
+    match /{document=**} {
+      allow read, write: if isGovernor();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // SETTINGS
+    ///////////////////////////////////////////////////////////////////////////
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor() || hasPermission('manageSystem');
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MODULES
+    ///////////////////////////////////////////////////////////////////////////
+    match /modules/{moduleId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor() || hasPermission('manageContent');
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MAIN MODULES
+    ///////////////////////////////////////////////////////////////////////////
+    match /main_modules/{moduleId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor() || hasPermission('manageContent');
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // SUBMODULES
+    ///////////////////////////////////////////////////////////////////////////
+    match /submodules/{submoduleId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor() || hasPermission('manageContent');
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // USER MODULE PROGRESS
+    ///////////////////////////////////////////////////////////////////////////
+    match /user_module_progress/{progressId} {
+      allow read, update: if isAuthenticated() &&
+        resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // COURSE ENROLLMENTS
+    ///////////////////////////////////////////////////////////////////////////
+    match /course_enrollments/{enrollmentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() &&
+        resource.data.user_id == request.auth.uid;
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // USER POINTS & REWARDS
+    ///////////////////////////////////////////////////////////////////////////
+    match /user_points/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() &&
+        resource.data.user_id == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /point_events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // USER PROGRESS TRACKING
+    ///////////////////////////////////////////////////////////////////////////
+    match /userProgress/{userId}/modules/{moduleId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isGovernor()
+      );
+      allow write: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isGovernor()
+      );
+
+      match /lessons/{lessonId} {
+        allow read: if isAuthenticated() && (
+          request.auth.uid == userId ||
+          isGovernor()
+        );
+        allow write: if isAuthenticated() && (
+          request.auth.uid == userId ||
+          isGovernor()
+        );
+      }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ENROLLMENTS (Module & Submodule Enrollments)
+    ///////////////////////////////////////////////////////////////////////////
+    match /enrollments/{enrollmentId} {
+      allow read: if isAuthenticated() && (
+        enrollmentId.matches('^' + request.auth.uid + '_.*') ||
+        (resource.exists() && resource.data.user_id == request.auth.uid) ||
+        isGovernor() ||
+        isStaff()
+      );
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        isGovernor()
+      );
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // COURSE PROGRESS (Individual Course Completion Tracking)
+    ///////////////////////////////////////////////////////////////////////////
+    match /course_progress/{progressId} {
+      allow read: if isAuthenticated() && (
+        progressId.matches('^' + request.auth.uid + '_.*') ||
+        (resource.exists() && resource.data.user_id == request.auth.uid) ||
+        isGovernor() ||
+        isStaff()
+      );
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        isGovernor()
+      );
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // VIDEO PROGRESS (Video Playback Tracking)
+    ///////////////////////////////////////////////////////////////////////////
+    match /video_progress/{progressId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        isGovernor() ||
+        isStaff()
+      );
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // EXAMS
+    ///////////////////////////////////////////////////////////////////////////
+    match /exams/{examId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor() || hasPermission('manageContent') || hasRole('mentor');
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // USER EXAMS (Exam Results)
+    // Supports two patterns:
+    // 1. {userId}_{moduleId}_{lessonId} - for lesson exams
+    // 2. {examId}_{userId}_latest - for course exams
+    ///////////////////////////////////////////////////////////////////////////
+    match /userExams/{resultId} {
+      allow read: if isAuthenticated() && (
+        resultId.matches('^' + request.auth.uid + '_.*') ||
+        resultId.matches('.*_' + request.auth.uid + '_.*') ||
+        (resource.exists() && resource.data.userId == request.auth.uid) ||
+        isGovernor() ||
+        isStaff()
+      );
+      allow list: if isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // QUIZ RESULTS
+    ///////////////////////////////////////////////////////////////////////////
+    match /quizResults/{resultId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor() ||
+        isStaff()
+      );
+      allow list: if isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+
+    ///////////////////////////////////////////////////////////////////////////
+    // AUDIT LOGS (System-wide Activity)
+    ///////////////////////////////////////////////////////////////////////////
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    match /auditEvents/{eventId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // USER PRESENCE (Online Status)
+    ///////////////////////////////////////////////////////////////////////////
+    match /userPresence/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // TYPING INDICATORS
+    ///////////////////////////////////////////////////////////////////////////
+    match /typingIndicators/{indicatorId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // FCM TOKENS (Push Notifications)
+    ///////////////////////////////////////////////////////////////////////////
+    match /fcmTokens/{tokenId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor()
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // FILE METADATA (Storage Management)
+    ///////////////////////////////////////////////////////////////////////////
+    match /fileMetadata/{fileId} {
+      allow read: if isAuthenticated() && (
+        resource.data.uploadedBy == request.auth.uid ||
+        isGovernor() ||
+        isStaff()
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.uploadedBy == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.uploadedBy == request.auth.uid ||
+        isGovernor()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.uploadedBy == request.auth.uid ||
+        isGovernor()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // STORAGE QUOTA
+    ///////////////////////////////////////////////////////////////////////////
+    match /storageQuota/{userId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isGovernor()
+      );
+      allow write: if isGovernor();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ANALYTICS EVENTS (Tracking)
+    ///////////////////////////////////////////////////////////////////////////
+    match /analyticsEvents/{eventId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MESSAGES (Legacy Support)
+    ///////////////////////////////////////////////////////////////////////////
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid ||
+        resource.data.recipientId == request.auth.uid ||
+        isGovernor()
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.senderId == request.auth.uid;
+      allow update: if isAuthenticated() &&
+        resource.data.senderId == request.auth.uid;
+      allow delete: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid ||
+        isGovernor()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ONBOARDING DATA
+    ///////////////////////////////////////////////////////////////////////////
+    match /onboarding/{userId} {
+      allow read, write: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isGovernor()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // USER BADGES & ACHIEVEMENTS
+    ///////////////////////////////////////////////////////////////////////////
+    match /user_badges/{badgeId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // CREW DECLARATIONS
+    ///////////////////////////////////////////////////////////////////////////
+    match /crew_declarations/{declarationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MARKETPLACE - PRODUCTS
+    ///////////////////////////////////////////////////////////////////////////
+    match /marketplace_products/{productId} {
+      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.seller_id == request.auth.uid &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() > 0 &&
+        request.resource.data.description is string &&
+        request.resource.data.price is number &&
+        request.resource.data.price >= 0 &&
+        request.resource.data.currency is string &&
+        request.resource.data.product_type in ['digital', 'physical', 'service'] &&
+        request.resource.data.status in ['draft', 'published', 'sold', 'archived'];
+
+      allow update: if isAuthenticated() && (
+        resource.data.seller_id == request.auth.uid ||
+        isGovernor() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views_count']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views_count', 'updatedAt'])
+      );
+
+      allow delete: if isAuthenticated() && (
+        resource.data.seller_id == request.auth.uid ||
+        isGovernor()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MARKETPLACE - ORDERS
+    ///////////////////////////////////////////////////////////////////////////
+    match /marketplace_orders/{orderId} {
+      allow read: if isAuthenticated() && (
+        resource.data.buyer_id == request.auth.uid ||
+        resource.data.seller_id == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow list: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.buyer_id == request.auth.uid;
+
+      allow update: if isAuthenticated() && (
+        resource.data.buyer_id == request.auth.uid ||
+        resource.data.seller_id == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MARKETPLACE - FAVORITES
+    ///////////////////////////////////////////////////////////////////////////
+    match /marketplace_favorites/{favoriteId} {
+      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.user_id == request.auth.uid;
+
+      allow delete: if isAuthenticated() &&
+        resource.data.user_id == request.auth.uid;
+
+      allow update: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MARKETPLACE - REVIEWS
+    ///////////////////////////////////////////////////////////////////////////
+    match /marketplace_reviews/{reviewId} {
+      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.buyer_id == request.auth.uid &&
+        request.resource.data.rating is number &&
+        request.resource.data.rating >= 1 &&
+        request.resource.data.rating <= 5;
+
+      allow update: if isAuthenticated() && (
+        resource.data.buyer_id == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow delete: if isAuthenticated() && (
+        resource.data.buyer_id == request.auth.uid ||
+        isGovernor()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // MARKETPLACE - MESSAGES (Conversations)
+    ///////////////////////////////////////////////////////////////////////////
+    match /marketplace_messages/{conversationId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid in resource.data.participants ||
+        isGovernor()
+      );
+
+      allow list: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        request.auth.uid in request.resource.data.participants &&
+        request.resource.data.participants.size() == 2;
+
+      allow update: if isAuthenticated() && (
+        request.auth.uid in resource.data.participants ||
+        isGovernor()
+      );
+
+      allow delete: if isAuthenticated() && (
+        request.auth.uid in resource.data.participants ||
+        isGovernor()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ACTIVITY ATTENDANCE
+    ///////////////////////////////////////////////////////////////////////////
+    match /activity_attendance/{attendanceId} {
+      allow read: if isAuthenticated() && (
+        resource.data.seller_id == request.auth.uid ||
+        resource.data.attendee_id == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow list: if isAuthenticated();
+
+      allow create: if isAuthenticated();
+
+      allow update: if isAuthenticated() && (
+        resource.data.seller_id == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // AI MODERATION LOGS
+    ///////////////////////////////////////////////////////////////////////////
+    match /moderation_logs/{logId} {
+      // Governors and moderators can read all logs
+      allow read, list: if isAuthenticated() && isModerator();
+
+      // System creates logs (server-side or client-side service)
+      allow create: if isAuthenticated();
+
+      // Only governors can update logs (for appeals review)
+      allow update: if isAuthenticated() && isGovernor();
+
+      // No one can delete logs
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ACTIVITIES (Events & Check-ins)
+    ///////////////////////////////////////////////////////////////////////////
+    match /activities/{activityId} {
+      // Anyone authenticated can read activities
+      allow read, list: if isAuthenticated();
+
+      // Staff and governors can create/update activities
+      // Also allow users to update registeredCount when joining
+      allow create, update: if isAuthenticated() && (
+        isStaff() ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registeredCount']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registeredCount', 'updatedAt']))
+      );
+
+      // Only governors can delete activities
+      allow delete: if isAuthenticated() && isGovernor();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ACTIVITY STREAKS
+    ///////////////////////////////////////////////////////////////////////////
+    match /activity_streaks/{streakId} {
+      // Users can read their own streaks, staff can read all
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isStaff()
+      );
+
+      allow list: if isAuthenticated();
+
+      // Users can create/update their own streaks
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // USER STREAKS (Alternative collection name)
+    ///////////////////////////////////////////////////////////////////////////
+    match /user_streaks/{userId} {
+      // Users can read their own streaks, staff can read all
+      allow read: if isAuthenticated() && (
+        userId == request.auth.uid ||
+        isStaff()
+      );
+
+      allow list: if isAuthenticated();
+
+      // Users can create/update their own streaks
+      allow create, update: if isAuthenticated() &&
+        userId == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ACTIVITY GALLERIES
+    ///////////////////////////////////////////////////////////////////////////
+    match /activity_galleries/{galleryId} {
+      // Anyone authenticated can view galleries
+      allow read, list: if isAuthenticated();
+
+      // Staff can create/update galleries
+      allow create, update: if isAuthenticated() && isStaff();
+
+      // Only governors can delete galleries
+      allow delete: if isAuthenticated() && isGovernor();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // WALLETS
+    ///////////////////////////////////////////////////////////////////////////
+    match /wallets/{walletId} {
+      // Users can read their own wallet
+      allow read: if isAuthenticated() && (
+        walletId == request.auth.uid ||
+        isGovernor()
+      );
+
+      // Users can create their own wallet
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Wallets can be updated by the user or governors
+      allow update: if isAuthenticated() && (
+        walletId == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // WALLET TRANSACTIONS
+    ///////////////////////////////////////////////////////////////////////////
+    match /wallet_transactions/{transactionId} {
+      // Users can read their own transactions
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow list: if isAuthenticated();
+
+      // System creates transactions
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // REFERRALS
+    ///////////////////////////////////////////////////////////////////////////
+    match /referrals/{referralId} {
+      // Users can read their own referrals and anyone they referred
+      allow read: if isAuthenticated() && (
+        resource.data.referrerId == request.auth.uid ||
+        resource.data.referredUserId == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow list: if isAuthenticated();
+
+      // Users can create referrals
+      allow create: if isAuthenticated();
+
+      // Only system can update referrals
+      allow update: if isAuthenticated() && isGovernor();
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // AFFILIATE STATS
+    ///////////////////////////////////////////////////////////////////////////
+    match /affiliate_stats/{userId} {
+      // Users can read their own stats
+      allow read: if isAuthenticated() && (
+        userId == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow list: if isAuthenticated() && isGovernor();
+
+      // System creates/updates stats
+      allow create, update: if isAuthenticated() && (
+        userId == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ORDERS (Legacy - for AI context service)
+    ///////////////////////////////////////////////////////////////////////////
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow list: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.buyerId == request.auth.uid;
+
+      allow update: if isAuthenticated() && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.sellerId == request.auth.uid ||
+        isGovernor()
+      );
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // COMMUNITY POSTS (Legacy collection name)
+    ///////////////////////////////////////////////////////////////////////////
+    match /communityPosts/{postId} {
+      allow read, list: if isAuthenticated();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isModerator()
+      );
+
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isModerator()
+      );
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // PROGRESS (Generic progress tracking)
+    ///////////////////////////////////////////////////////////////////////////
+    match /progress/{progressId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isStaff()
+      );
+
+      allow list: if isAuthenticated();
+
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // UPDATES (System updates and announcements)
+    ///////////////////////////////////////////////////////////////////////////
+    match /updates/{updateId} {
+      // All authenticated users can read updates
+      allow read, list: if isAuthenticated();
+
+      // Only governors can create/update/delete updates
+      allow create, update, delete: if isAuthenticated() && isGovernor();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ACTIVITIES (Simplified activity system) - DUPLICATE REMOVED
+    // NOTE: Rules for /activities/ are defined above (line 1055)
+    ///////////////////////////////////////////////////////////////////////////
+
+    ///////////////////////////////////////////////////////////////////////////
+    // ACTIVITY REGISTRATIONS (Student registrations for activities)
+    ///////////////////////////////////////////////////////////////////////////
+    match /activity_registrations/{registrationId} {
+      // Users can read their own registrations
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isStaff()
+      );
+
+      // Users can list their own registrations, staff can list all
+      allow list: if isAuthenticated();
+
+      // Users can register themselves, staff can register anyone
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid || isStaff()
+      );
+
+      // Only staff can update registrations (for check-ins)
+      allow update: if isAuthenticated() && isStaff();
+
+      // No one can delete registrations
+      allow delete: if false;
+    }
+  }
+}

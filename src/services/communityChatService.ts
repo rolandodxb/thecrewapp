@@ -311,8 +311,14 @@ export const communityChatService = {
     const userId = auth.currentUser?.uid;
     if (!userId) throw new Error('Not authenticated');
 
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    const userName = userDoc.data()?.name || 'Unknown User';
+    let userName = 'Unknown User';
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      userName = userDoc.data()?.name || 'Unknown User';
+    } catch (error) {
+      console.error('Error fetching user document:', error);
+      throw new Error('Failed to fetch user data. Please make sure you have a user profile.');
+    }
 
     const postingCheck = await reputationService.checkPostingAllowed(userId);
     if (!postingCheck.allowed) {
@@ -387,19 +393,32 @@ export const communityChatService = {
       replyTo: replyTo || null,
     };
 
-    await setDoc(messageRef, messageData);
+    try {
+      console.log('Attempting to create message in:', conversationId);
+      console.log('Message data:', { ...messageData, attachmentUrl: attachmentUrl ? 'present' : 'none' });
+      await setDoc(messageRef, messageData);
+      console.log('Message created successfully');
+    } catch (error) {
+      console.error('Error creating message:', error);
+      throw new Error('Failed to send message. Permission denied.');
+    }
 
-    const conversationRef = doc(db, 'groupChats', conversationId);
-    const conversationDoc = await getDoc(conversationRef);
-    const conversationTitle = conversationDoc.data()?.title || 'Chat';
+    try {
+      const conversationRef = doc(db, 'groupChats', conversationId);
+      const conversationDoc = await getDoc(conversationRef);
+      const conversationTitle = conversationDoc.data()?.title || 'Chat';
 
-    await updateDoc(conversationRef, {
-      lastMessage: {
-        text: content,
-        senderId: userId,
-        createdAt: Timestamp.now(),
-      },
-    });
+      await updateDoc(conversationRef, {
+        lastMessage: {
+          text: content,
+          senderId: userId,
+          createdAt: Timestamp.now(),
+        },
+      });
+    } catch (error) {
+      console.error('Error updating conversation:', error);
+      // Don't throw here, message was already sent
+    }
 
     const mentions = await messageMentionsService.extractMentions(content);
     if (mentions.length > 0) {

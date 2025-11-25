@@ -12,126 +12,96 @@ export default function FeatureLock({ requiredPlan, featureName, description }: 
   const navigate = useNavigate();
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center justify-center p-4 py-8"
-    >
-      <div className="max-w-xl w-full">
-        <div className={`rounded-2xl shadow-xl overflow-hidden ${
+    <div className="min-h-screen w-full flex items-center justify-center p-3 sm:p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md"
+      >
+        <div className={`rounded-xl shadow-lg overflow-hidden ${
           requiredPlan === 'vip'
             ? 'bg-gradient-to-br from-[#FFD700] via-[#D4AF37] to-[#FFD700]'
             : 'bg-gradient-to-br from-[#D71921] via-[#B91518] to-[#D71921]'
         }`}>
-          <div className="p-6 md:p-8 text-center">
+          <div className="p-4 sm:p-5 text-center">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: 'spring' }}
-              className={`inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full mb-4 ${
+              className={`inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-full mb-3 ${
                 requiredPlan === 'vip' ? 'bg-white' : 'bg-white bg-opacity-20'
               }`}
             >
-              <Lock className={`w-8 h-8 md:w-10 md:h-10 ${requiredPlan === 'vip' ? 'text-[#FFD700]' : 'text-white'}`} />
+              <Lock className={`w-6 h-6 sm:w-7 sm:h-7 ${requiredPlan === 'vip' ? 'text-[#FFD700]' : 'text-white'}`} />
             </motion.div>
 
-            <h1 className={`text-2xl md:text-3xl font-bold mb-3 ${requiredPlan === 'vip' ? 'text-[#000000]' : 'text-white'}`}>
+            <h1 className={`text-lg sm:text-xl font-bold mb-2 ${requiredPlan === 'vip' ? 'text-[#000000]' : 'text-white'}`}>
               {featureName} is Locked
             </h1>
 
-            <p className={`text-base md:text-lg mb-6 ${requiredPlan === 'vip' ? 'text-[#000000] text-opacity-80' : 'text-white text-opacity-90'}`}>
+            <p className={`text-xs sm:text-sm mb-4 ${requiredPlan === 'vip' ? 'text-[#000000] text-opacity-80' : 'text-white text-opacity-90'}`}>
               {description}
             </p>
 
-            <div className="bg-white rounded-xl p-4 md:p-6 mb-6 text-left">
-              <div className="flex items-center gap-2 mb-4">
+            <div className="bg-white rounded-lg p-3 sm:p-4 mb-4 text-left">
+              <div className="flex items-center gap-2 mb-3">
                 {requiredPlan === 'vip' ? (
-                  <Crown className="w-6 h-6 text-[#FFD700]" />
+                  <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFD700]" />
                 ) : (
-                  <Zap className="w-6 h-6 text-[#D71921]" />
+                  <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-[#D71921]" />
                 )}
-                <h2 className="text-lg md:text-xl font-bold text-gray-800">
-                  {requiredPlan.toUpperCase()} Plan Features
+                <h2 className="text-sm sm:text-base font-bold text-gray-800">
+                  {requiredPlan.toUpperCase()} Features
                 </h2>
               </div>
 
-              <ul className="space-y-3">
+              <ul className="space-y-2">
                 {requiredPlan === 'vip' ? (
                   <>
-                    <li className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#FFD700] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-[#000000] text-xs font-bold">✓</span>
+                    <li className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-[#FFD700] flex items-center justify-center flex-shrink-0">
+                        <span className="text-[#000000] text-[10px] font-bold">✓</span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">AI Trainer Access</p>
-                        <p className="text-gray-600 text-xs">Personalized coaching from AI</p>
-                      </div>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">AI Trainer & Simulator</p>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#FFD700] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-[#000000] text-xs font-bold">✓</span>
+                    <li className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-[#FFD700] flex items-center justify-center flex-shrink-0">
+                        <span className="text-[#000000] text-[10px] font-bold">✓</span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">Open Day Simulator</p>
-                        <p className="text-gray-600 text-xs">Realistic assessment scenarios</p>
-                      </div>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">Priority Support</p>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#FFD700] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-[#000000] text-xs font-bold">✓</span>
+                    <li className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-[#FFD700] flex items-center justify-center flex-shrink-0">
+                        <span className="text-[#000000] text-[10px] font-bold">✓</span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">Priority Support</p>
-                        <p className="text-gray-600 text-xs">Dedicated VIP support</p>
-                      </div>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#FFD700] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-[#000000] text-xs font-bold">✓</span>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">All Pro Features</p>
-                        <p className="text-gray-600 text-xs">Recruiter access, messaging & more</p>
-                      </div>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">All Pro Features</p>
                     </li>
                   </>
                 ) : (
                   <>
-                    <li className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#D71921] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-white text-xs font-bold">✓</span>
+                    <li className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-[#D71921] flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-[10px] font-bold">✓</span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">Recruiter Profiles</p>
-                        <p className="text-gray-600 text-xs">Connect with airline recruiters</p>
-                      </div>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">Recruiter Profiles</p>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#D71921] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-white text-xs font-bold">✓</span>
+                    <li className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-[#D71921] flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-[10px] font-bold">✓</span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">Open Days Access</p>
-                        <p className="text-gray-600 text-xs">View recruitment events</p>
-                      </div>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">Open Days Access</p>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#D71921] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-white text-xs font-bold">✓</span>
+                    <li className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-[#D71921] flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-[10px] font-bold">✓</span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">Private Messaging</p>
-                        <p className="text-gray-600 text-xs">Chat with mentors & students</p>
-                      </div>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">Private Messaging</p>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#D71921] flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-white text-xs font-bold">✓</span>
+                    <li className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-[#D71921] flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-[10px] font-bold">✓</span>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">Premium Courses</p>
-                        <p className="text-gray-600 text-xs">Exclusive training materials</p>
-                      </div>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">Premium Courses</p>
                     </li>
                   </>
                 )}
@@ -140,20 +110,20 @@ export default function FeatureLock({ requiredPlan, featureName, description }: 
 
             <button
               onClick={() => navigate('/upgrade')}
-              className="w-full px-6 py-3 bg-white text-gray-800 rounded-xl font-bold text-base md:text-lg hover:shadow-2xl transition transform hover:scale-105"
+              className="w-full px-4 py-2.5 bg-white text-gray-800 rounded-lg font-bold text-sm sm:text-base hover:shadow-xl transition transform hover:scale-105"
             >
-              Upgrade to {requiredPlan.toUpperCase()} Now
+              Upgrade to {requiredPlan.toUpperCase()}
             </button>
 
             <button
               onClick={() => navigate('/dashboard')}
-              className={`mt-3 text-xs md:text-sm ${requiredPlan === 'vip' ? 'text-[#000000]' : 'text-white'} hover:underline`}
+              className={`mt-2 text-[11px] sm:text-xs ${requiredPlan === 'vip' ? 'text-[#000000]' : 'text-white'} hover:underline opacity-80`}
             >
               Return to Dashboard
             </button>
           </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 }

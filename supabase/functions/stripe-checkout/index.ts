@@ -50,7 +50,6 @@ Deno.serve(async (req) => {
       return corsResponse({ error: 'Method not allowed' }, 405);
     }
 
-    // Get authorization or apikey header for authentication
     const authHeader = req.headers.get('Authorization');
     const apiKey = req.headers.get('apikey');
 

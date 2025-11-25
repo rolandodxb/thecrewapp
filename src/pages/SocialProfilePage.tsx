@@ -3,9 +3,9 @@ import { useApp } from '../context/AppContext';
 import { communityFeedService, CommunityPost } from '../services/communityFeedService';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Award, BookOpen, Trophy, Grid3x3, Lock } from 'lucide-react';
+import { Award, BookOpen, Trophy, Grid3x3, Lock, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 interface UserStats {
   totalPoints: number;
@@ -14,9 +14,23 @@ interface UserStats {
   modulesCompleted: number;
 }
 
+interface UserProfile {
+  uid: string;
+  name: string;
+  email: string;
+  role: string;
+  plan?: string;
+  bio?: string;
+  photoURL?: string;
+  photo_base64?: string;
+}
+
 export default function SocialProfilePage() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const viewingUserId = searchParams.get('userId');
+
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<UserStats>({
@@ -25,8 +39,7 @@ export default function SocialProfilePage() {
     coursesCompleted: 0,
     modulesCompleted: 0
   });
-  const [userBio, setUserBio] = useState('');
-  const [profilePhoto, setProfilePhoto] = useState('');
+  const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -35,59 +48,86 @@ export default function SocialProfilePage() {
       try {
         setLoading(true);
 
-        const userDocRef = await getDocs(
-          query(collection(db, 'users'), where('uid', '==', currentUser.uid))
-        );
+        const targetUserId = viewingUserId || currentUser.uid;
 
-        if (!userDocRef.empty) {
-          const userData = userDocRef.docs[0].data();
-          setUserBio(userData.bio || 'No bio added yet');
-          setProfilePhoto(userData.photo_base64 || currentUser.photoURL || '');
+        // Load user profile data
+        const userQuery = query(collection(db, 'users'), where('uid', '==', targetUserId));
+        const userSnapshot = await getDocs(userQuery);
+
+        let userData: UserProfile = {
+          uid: targetUserId,
+          name: 'Unknown User',
+          email: '',
+          role: 'student',
+        };
+
+        if (!userSnapshot.empty) {
+          const userDoc = userSnapshot.docs[0].data();
+          userData = {
+            uid: targetUserId,
+            name: userDoc.name || userDoc.displayName || 'Unknown User',
+            email: userDoc.email || '',
+            role: userDoc.role || 'student',
+            plan: userDoc.plan || undefined,
+            bio: userDoc.bio || 'No bio added yet',
+            photoURL: userDoc.photoURL || '',
+            photo_base64: userDoc.photo_base64 || '',
+          };
         }
 
+        setProfileUser(userData);
+
+        // Load user's posts
         const { posts: userPosts } = await communityFeedService.getPosts(
           undefined,
           undefined,
-          { userId: currentUser.uid }
+          { userId: targetUserId }
         );
         setPosts(userPosts);
 
-        const progressQuery = query(
-          collection(db, 'progress'),
-          where('userId', '==', currentUser.uid)
+        // Load achievements from course_enrollments collection
+        const enrollmentsQuery = query(
+          collection(db, 'course_enrollments'),
+          where('user_id', '==', targetUserId)
         );
-        const progressSnapshot = await getDocs(progressQuery);
+        const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
 
-        let totalPoints = 0;
         let modulesCompleted = 0;
-        let coursesCompleted = 0;
-
-        progressSnapshot.docs.forEach(doc => {
+        enrollmentsSnapshot.docs.forEach(doc => {
           const data = doc.data();
-          totalPoints += data.totalPoints || 0;
           if (data.completed) {
             modulesCompleted++;
           }
         });
 
-        const coursesQuery = query(
-          collection(db, 'enrollments'),
-          where('userId', '==', currentUser.uid),
-          where('completed', '==', true)
+        // Load total points from user_points collection
+        const pointsQuery = query(
+          collection(db, 'user_points'),
+          where('user_id', '==', targetUserId)
         );
-        const coursesSnapshot = await getDocs(coursesQuery);
-        coursesCompleted = coursesSnapshot.size;
+        const pointsSnapshot = await getDocs(pointsQuery);
+        const totalPoints = pointsSnapshot.empty ? 0 : pointsSnapshot.docs[0].data().total_points || 0;
 
+        // Load certificates
         const certificatesQuery = query(
           collection(db, 'certificates'),
-          where('userId', '==', currentUser.uid)
+          where('userId', '==', targetUserId)
         );
         const certificatesSnapshot = await getDocs(certificatesQuery);
+
+        // Count unique completed courses
+        const completedCourses = new Set<string>();
+        enrollmentsSnapshot.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.completed && data.course_id) {
+            completedCourses.add(data.course_id);
+          }
+        });
 
         setStats({
           totalPoints,
           certificatesEarned: certificatesSnapshot.size,
-          coursesCompleted,
+          coursesCompleted: completedCourses.size,
           modulesCompleted
         });
       } catch (error) {
@@ -98,16 +138,18 @@ export default function SocialProfilePage() {
     };
 
     loadUserProfile();
-  }, [currentUser]);
+  }, [currentUser, viewingUserId]);
 
   const handlePostClick = (post: CommunityPost) => {
     navigate('/community-feed', { state: { postId: post.id } });
   };
 
+  const isOwnProfile = !viewingUserId || viewingUserId === currentUser?.uid;
+
   if (!currentUser) {
     return (
       <div className="absolute inset-0 flex items-center justify-center">
-        <p className="text-gray-600">Please log in to view your profile.</p>
+        <p className="text-gray-600">Please log in to view profiles.</p>
       </div>
     );
   }
@@ -120,38 +162,59 @@ export default function SocialProfilePage() {
     );
   }
 
+  if (!profileUser) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center">
+        <p className="text-gray-600">User not found.</p>
+      </div>
+    );
+  }
+
+  const displayPhoto = profileUser.photo_base64 || profileUser.photoURL ||
+    `data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22200%22/%3E%3Ctext fill=%22%23999%22 font-family=%22sans-serif%22 font-size=%2260%22 dy=%2210.5rem%22 font-weight=%22bold%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22%3E${profileUser.name?.[0] || 'U'}%3C/text%3E%3C/svg%3E`;
+
   return (
     <div className="absolute inset-0 overflow-y-auto">
       <div className="max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8">
+        {!isOwnProfile && (
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 mb-4 px-4 py-2 liquid-button-secondary rounded-lg font-semibold transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+        )}
+
         <div className="liquid-crystal-panel p-4 md:p-8 mb-4 md:mb-6">
           <div className="flex flex-col items-center">
             <div className="relative mb-4">
               <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-white shadow-xl">
                 <img
-                  src={profilePhoto || `data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22200%22/%3E%3Ctext fill=%22%23999%22 font-family=%22sans-serif%22 font-size=%2260%22 dy=%2210.5rem%22 font-weight=%22bold%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22%3E${currentUser.name?.[0] || 'U'}%3C/text%3E%3C/svg%3E`}
-                  alt={currentUser.name}
+                  src={displayPhoto}
+                  alt={profileUser.name}
                   className="w-full h-full object-cover"
                 />
               </div>
             </div>
 
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
-              {currentUser.name || 'Anonymous User'}
+              {profileUser.name}
             </h1>
 
             <div className="flex items-center gap-2 mb-4">
               <span className="px-3 py-1 bg-gradient-to-r from-[#D71920] to-[#B91518] text-white text-xs font-bold rounded-full uppercase">
-                {currentUser.role}
+                {profileUser.role}
               </span>
-              {currentUser.plan && (
+              {profileUser.plan && (
                 <span className="px-3 py-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-full uppercase">
-                  {currentUser.plan}
+                  {profileUser.plan}
                 </span>
               )}
             </div>
 
             <p className="text-center text-gray-700 max-w-2xl mb-6 text-sm md:text-base leading-relaxed">
-              {userBio}
+              {profileUser.bio}
             </p>
           </div>
         </div>
@@ -208,7 +271,9 @@ export default function SocialProfilePage() {
             <div className="text-center py-12">
               <Grid3x3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-bold text-gray-700 mb-2">No posts yet</h3>
-              <p className="text-sm text-gray-600">Share your first post with the community!</p>
+              <p className="text-sm text-gray-600">
+                {isOwnProfile ? 'Share your first post with the community!' : 'This user has not posted yet.'}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-3 md:grid-cols-6 gap-1 md:gap-2">

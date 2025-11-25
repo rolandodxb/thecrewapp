@@ -5,6 +5,7 @@ import { getLeaderboard, UserPoints } from '../services/rewardsService';
 import BadgeDisplay from '../components/BadgeDisplay';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { useNavigate } from 'react-router-dom';
 
 interface UserWithDetails extends UserPoints {
   userName: string;
@@ -23,6 +24,7 @@ interface GroupedUsers {
 }
 
 export default function LeaderboardPage() {
+  const navigate = useNavigate();
   const [groupedUsers, setGroupedUsers] = useState<GroupedUsers>({
     admins: [],
     supportAgents: [],
@@ -154,7 +156,13 @@ export default function LeaderboardPage() {
               {getRankIcon(index)}
             </div>
 
-            <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-[#D71920] to-[#B91518] shadow-lg ring-4 ring-white">
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/social-profile?userId=${user.user_id}`);
+              }}
+              className="w-16 h-16 md:w-20 md:h-20 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-[#D71920] to-[#B91518] shadow-lg ring-4 ring-white cursor-pointer hover:ring-[#D71920] transition-all"
+            >
               {user.photoURL ? (
                 <img
                   src={user.photoURL}

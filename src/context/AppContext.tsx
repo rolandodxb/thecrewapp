@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import {
   getSystemControl,
@@ -181,9 +181,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
               initializeUserPoints(firebaseUser.uid).catch(console.error);
               handleDailyLogin(firebaseUser.uid).catch(console.error);
             } else {
-              auth.signOut();
-              setCurrentUser(null);
-              sessionStorage.clear();
+              console.log('User document does not exist, creating default document...');
+              const defaultUserData = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || '',
+                name: firebaseUser.displayName || 'User',
+                role: 'student',
+                plan: 'free',
+                country: '',
+                bio: '',
+                expectations: '',
+                photo_base64: '',
+                points: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                hasCompletedOnboarding: false,
+                hasSeenWelcomeBanner: false,
+              };
+
+              setDoc(userDocRef, defaultUserData).catch((err) => {
+                console.error('Error creating user document:', err);
+                auth.signOut();
+                setCurrentUser(null);
+                sessionStorage.clear();
+              });
             }
           },
           (error) => {

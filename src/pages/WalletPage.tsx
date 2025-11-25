@@ -351,7 +351,15 @@ export default function WalletPage() {
                       </button>
                     </>
                   ) : (
-                    <Elements stripe={stripePromise}>
+                    <Elements
+                      stripe={stripePromise}
+                      options={{
+                        clientSecret: clientSecret,
+                        appearance: {
+                          theme: 'stripe',
+                        },
+                      }}
+                    >
                       <PaymentForm
                         amount={Math.round(topUpAmount * 100)}
                         currency="usd"

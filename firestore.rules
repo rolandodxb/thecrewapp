@@ -128,36 +128,31 @@ service cloud.firestore {
     // - Only governors and moderators can delete any post
     ///////////////////////////////////////////////////////////////////////////
     match /community_posts/{postId} {
+      allow read, list: if request.auth != null;
 
-  // Everyone logged in can read & list posts
-  allow read, list: if isAuthenticated();
+      // Anyone authenticated can create a post
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid;
 
-  // ✅ All authenticated users can create posts (students included)
-  // Ensure they can only create posts with THEIR OWN userId
-  allow create: if isAuthenticated() &&
-    request.resource.data.userId == request.auth.uid;
+      // Post owner can update their own content, or staff can moderate
+      // Any authenticated user can update view tracking and reaction/comment counts
+      allow update: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        isModerator()
+      );
 
-  // User can edit their own post OR a moderator can update it
-  allow update: if isAuthenticated() && (
-    resource.data.userId == request.auth.uid ||
-    isModerator()
-  );
+      // Anyone can update counter fields for reactions, comments, and views
+      allow update: if request.auth != null &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactionsCount']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount', 'updatedAt']);
 
-  // Allow safe non-destructive counter updates by any logged-in user
-  allow update: if isAuthenticated() &&
-    (
-      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactionsCount']) ||
-      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount']) ||
-      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy','viewsCount']) ||
-      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy','viewsCount','updatedAt'])
-    );
-
-  // User can delete their own post, or moderator can delete
-  allow delete: if isAuthenticated() && (
-    resource.data.userId == request.auth.uid ||
-    isModerator()
-  );
-
+      // Users can delete their own posts, or governors and moderators can delete any post
+      allow delete: if request.auth != null && (
+        resource.data.userId == request.auth.uid ||
+        isModerator()
+      );
     }
 
     match /community_comments/{commentId} {

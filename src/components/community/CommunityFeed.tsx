@@ -210,7 +210,7 @@ export default function CommunityFeed() {
       <div className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-6">
         <div className="max-w-4xl mx-auto">
           <div className="liquid-crystal-panel p-4 md:p-6 mb-4">
-            <div className="flex items-center justify-between mb-4 md:mb-6">
+            <div className="flex items-center justify-between mb-4">
               <h1 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-[#D71920] to-[#B91518] bg-clip-text text-transparent">
                 Community
               </h1>
@@ -219,54 +219,62 @@ export default function CommunityFeed() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setShowCreateForm(!showCreateForm)}
-                  className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 bg-gradient-to-r from-[#D71920] to-[#B91518] text-white rounded-xl font-bold shadow-lg text-sm md:text-base"
+                  className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 bg-gradient-to-r from-[#D71920] to-[#B91518] text-white rounded-lg font-bold shadow-lg text-sm"
                 >
-                  <Plus className="w-4 h-4 md:w-5 md:h-5" />
-                  <span>Create Post</span>
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Create Post</span>
+                  <span className="sm:hidden">Post</span>
                 </motion.button>
               )}
             </div>
 
-            <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
-              {channels.map(channel => (
-                <motion.button
-                  key={channel.id}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setSelectedChannel(channel.id)}
-                  className={`px-3 md:px-4 py-2 rounded-xl font-bold transition whitespace-nowrap text-sm md:text-base ${
-                    selectedChannel === channel.id
-                      ? 'bg-gradient-to-r from-[#D71920] to-[#B91518] text-white shadow-lg'
-                      : 'liquid-card-overlay text-gray-700 hover:bg-white/80'
-                  }`}
-                >
-                  <span className="mr-1.5">{channel.icon}</span>
-                  <span className="hidden md:inline">{channel.label}</span>
-                  <span className="md:hidden">{channel.label.split(' ')[0]}</span>
-                </motion.button>
-              ))}
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {filters.map(filter => {
-                const Icon = filter.icon;
-                return (
+            <div className="border-t border-gray-200 pt-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Channels</span>
+              </div>
+              <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+                {channels.map(channel => (
                   <motion.button
-                    key={filter.id}
+                    key={channel.id}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setSelectedFilter(filter.id)}
-                    className={`flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1.5 rounded-lg font-semibold text-xs md:text-sm transition whitespace-nowrap ${
-                      selectedFilter === filter.id
-                        ? 'bg-[#D71920] text-white'
+                    onClick={() => setSelectedChannel(channel.id)}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition whitespace-nowrap text-xs ${
+                      selectedChannel === channel.id
+                        ? 'bg-gradient-to-r from-[#D71920] to-[#B91518] text-white shadow-md'
                         : 'liquid-card-overlay text-gray-700 hover:bg-white/80'
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                    {filter.label}
+                    <span className="mr-1">{channel.icon}</span>
+                    <span>{channel.label}</span>
                   </motion.button>
-                );
-              })}
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Filters</span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {filters.map(filter => {
+                  const Icon = filter.icon;
+                  return (
+                    <motion.button
+                      key={filter.id}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setSelectedFilter(filter.id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold text-xs transition whitespace-nowrap ${
+                        selectedFilter === filter.id
+                          ? 'bg-[#D71920] text-white shadow-sm'
+                          : 'liquid-card-overlay text-gray-700 hover:bg-white/80'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {filter.label}
+                    </motion.button>
+                  );
+                })}
+              </div>
             </div>
 
             <motion.div

@@ -1305,5 +1305,45 @@ service cloud.firestore {
       // No one can delete registrations
       allow delete: if false;
     }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // WAITLIST (Public access for joining, restricted read)
+    ///////////////////////////////////////////////////////////////////////////
+    match /waitlist/{entryId} {
+      // Anyone can create a waitlist entry (no auth required for joining)
+      allow create: if true &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.email is string &&
+        request.resource.data.email.matches('.*@.*\\..*') &&
+        request.resource.data.created_at is timestamp;
+
+      // Only governors can read waitlist entries
+      allow read, list: if isAuthenticated() && isGovernor();
+
+      // Only governors can update waitlist entries (for approvals)
+      allow update: if isAuthenticated() && isGovernor();
+
+      // No one can delete waitlist entries
+      allow delete: if false;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // STAFF ACCESS CODES (Governor management only)
+    ///////////////////////////////////////////////////////////////////////////
+    match /staff_access_codes/{codeId} {
+      // Only governors can read codes
+      allow read, list: if isAuthenticated() && isGovernor();
+
+      // Anyone can check if a code exists (for verification)
+      // This allows the verifyStaffCode function to work
+      allow get: if true;
+
+      // Only governors can create/update codes
+      allow create, update: if isAuthenticated() && isGovernor();
+
+      // No one can delete codes
+      allow delete: if false;
+    }
   }
 }

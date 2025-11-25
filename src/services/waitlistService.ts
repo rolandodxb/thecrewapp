@@ -1,5 +1,6 @@
 import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, updateDoc, doc, query, orderBy, where, Timestamp } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 export interface WaitlistEntry {
   id: string;
@@ -82,22 +83,38 @@ export const waitlistService = {
 
   async verifyStaffCode(code: string): Promise<boolean> {
     try {
-      const codesRef = collection(db, 'staff_access_codes');
-      const q = query(codesRef, where('code', '==', code), where('is_active', '==', true));
-      const snapshot = await getDocs(q);
+      // Query Supabase for active staff code
+      const { data, error } = await supabase
+        .from('staff_access_codes')
+        .select('*')
+        .eq('code', code)
+        .eq('is_active', true)
+        .maybeSingle();
 
-      if (snapshot.empty) {
+      if (error || !data) {
+        console.error('Error querying staff code:', error);
         return false;
       }
 
-      const docData = snapshot.docs[0];
-      const data = docData.data();
+      // Check if code has expired
+      if (data.expires_at && new Date(data.expires_at) < new Date()) {
+        return false;
+      }
 
-      // Update used count
-      const codeRef = doc(db, 'staff_access_codes', docData.id);
-      await updateDoc(codeRef, {
-        current_uses: (data.current_uses || 0) + 1
-      });
+      // Check if max uses reached
+      if (data.max_uses !== null && data.current_uses >= data.max_uses) {
+        return false;
+      }
+
+      // Increment usage count
+      const { error: updateError } = await supabase
+        .from('staff_access_codes')
+        .update({ current_uses: data.current_uses + 1 })
+        .eq('id', data.id);
+
+      if (updateError) {
+        console.error('Error updating staff code usage:', updateError);
+      }
 
       return true;
     } catch (err) {

@@ -2,12 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Image, Smile, Paperclip } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import MentionInput from './MentionInput';
 
 interface ChatComposerProps {
   onSend: (message: string, file?: File) => void;
   onTyping?: () => void;
   disabled?: boolean;
   placeholder?: string;
+  conversationMembers?: string[];
 }
 
 export default function ChatComposer({
@@ -15,6 +17,7 @@ export default function ChatComposer({
   onTyping,
   disabled = false,
   placeholder = 'Type a message...',
+  conversationMembers = [],
 }: ChatComposerProps) {
   const [message, setMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -84,20 +87,19 @@ export default function ChatComposer({
 
       <div className="flex items-end gap-2">
         <div className="flex-1 bg-white border border-gray-300 rounded-2xl focus-within:border-blue-500 transition">
-          <textarea
-            ref={textareaRef}
-            value={message}
-            onChange={(e) => {
-              setMessage(e.target.value);
-              onTyping?.();
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-            className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-400 max-h-[150px]"
-            style={{ minHeight: '48px' }}
-          />
+          <div className="px-4 pt-3">
+            <MentionInput
+              value={message}
+              onChange={(val) => {
+                setMessage(val);
+                onTyping?.();
+              }}
+              onSubmit={handleSend}
+              placeholder={placeholder}
+              disabled={disabled}
+              conversationMembers={conversationMembers}
+            />
+          </div>
 
           <div className="flex items-center gap-1 px-3 pb-2">
             <input

@@ -19,6 +19,9 @@ export function useChatMessages(conversationId: string | null) {
       return;
     }
 
+    setMessages([]);
+    setHasMore(true);
+    setLastDoc(null);
     setLoading(true);
 
     if (unsubscribeRef.current) {
@@ -28,19 +31,11 @@ export function useChatMessages(conversationId: string | null) {
     unsubscribeRef.current = communityChatService.subscribeToMessages(
       conversationId,
       (newMessages) => {
-        setMessages((prev) => {
-          const messageMap = new Map<string, Message>();
-          [...prev, ...newMessages].forEach(msg => {
-            if (msg.messageId) {
-              messageMap.set(msg.messageId, msg);
-            }
-          });
-          return Array.from(messageMap.values()).sort((a, b) => {
-            const aTime = a.createdAt?.toMillis?.() || 0;
-            const bTime = b.createdAt?.toMillis?.() || 0;
-            return aTime - bTime;
-          });
-        });
+        setMessages(newMessages.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return aTime - bTime;
+        }));
         setLoading(false);
       },
       (error) => {

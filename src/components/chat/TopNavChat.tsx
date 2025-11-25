@@ -1,13 +1,18 @@
-import { ArrowLeft, MoreVertical, Users } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, MoreVertical, Users, AtSign, Bell } from 'lucide-react';
 import { Conversation } from '../../services/communityChatService';
+import MentionsDropdown from './MentionsDropdown';
 
 interface TopNavChatProps {
   conversation: Conversation | null;
   onBack?: () => void;
   onlineCount?: number;
+  currentUserId?: string;
+  onNavigateToMessage?: (conversationId: string, messageId: string) => void;
 }
 
-export default function TopNavChat({ conversation, onBack, onlineCount }: TopNavChatProps) {
+export default function TopNavChat({ conversation, onBack, onlineCount, currentUserId, onNavigateToMessage }: TopNavChatProps) {
+  const [showMentions, setShowMentions] = useState(false);
   if (!conversation) {
     return (
       <div className="p-4">
@@ -74,9 +79,28 @@ export default function TopNavChat({ conversation, onBack, onlineCount }: TopNav
             </div>
           </div>
         </div>
-        <button className="p-2 hover:bg-gray-100 rounded-lg transition">
-          <MoreVertical className="w-5 h-5 text-gray-600" />
-        </button>
+        <div className="flex items-center gap-2">
+          {currentUserId && onNavigateToMessage && (
+            <div className="relative">
+              <button
+                onClick={() => setShowMentions(!showMentions)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition relative"
+                title="View mentions"
+              >
+                <AtSign className="w-5 h-5 text-gray-600" />
+              </button>
+              <MentionsDropdown
+                userId={currentUserId}
+                isOpen={showMentions}
+                onClose={() => setShowMentions(false)}
+                onNavigateToMessage={onNavigateToMessage}
+              />
+            </div>
+          )}
+          <button className="p-2 hover:bg-gray-100 rounded-lg transition">
+            <MoreVertical className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
       </div>
     </div>
   );

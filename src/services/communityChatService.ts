@@ -23,6 +23,7 @@ import { db, storage, auth, functions } from '../lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { aiModerationService } from './aiModerationService';
 import { reputationService } from './reputationService';
+import { messageMentionsService } from './messageMentionsService';
 
 export interface Conversation {
   id: string;
@@ -389,6 +390,9 @@ export const communityChatService = {
     await setDoc(messageRef, messageData);
 
     const conversationRef = doc(db, 'groupChats', conversationId);
+    const conversationDoc = await getDoc(conversationRef);
+    const conversationTitle = conversationDoc.data()?.title || 'Chat';
+
     await updateDoc(conversationRef, {
       lastMessage: {
         text: content,
@@ -396,6 +400,19 @@ export const communityChatService = {
         createdAt: Timestamp.now(),
       },
     });
+
+    const mentions = await messageMentionsService.extractMentions(content);
+    if (mentions.length > 0) {
+      await messageMentionsService.createMentionNotifications(
+        conversationId,
+        conversationTitle,
+        messageRef.id,
+        content,
+        userId,
+        userName,
+        mentions
+      );
+    }
 
     // try {
     //   const awardMessage = httpsCallable(functions, 'awardMessageSent');

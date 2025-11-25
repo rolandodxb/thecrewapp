@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { useSearchParams } from 'react-router-dom';
 import { communityChatService, Conversation } from '../services/communityChatService';
 import { presenceService } from '../services/presenceService';
+import { aiModeratorBotService } from '../services/aiModeratorBotService';
 import { auth } from '../lib/firebase';
 import { checkFeatureAccess } from '../utils/featureAccess';
 import FeatureLock from '../components/FeatureLock';
@@ -21,6 +22,7 @@ export default function CommunityPageNew() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [sending, setSending] = useState(false);
+  const moderatorUnsubscribeRef = useRef<(() => void) | null>(null);
 
   const { messages, loading, hasMore, loadMoreMessages } = useChatMessages(
     selectedConversation?.id || null
@@ -66,8 +68,33 @@ export default function CommunityPageNew() {
     return () => {
       presenceService.cleanup();
       unsubscribeConversations();
+      if (moderatorUnsubscribeRef.current) {
+        moderatorUnsubscribeRef.current();
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (selectedConversation && selectedConversation.id === 'publicRoom') {
+      if (moderatorUnsubscribeRef.current) {
+        moderatorUnsubscribeRef.current();
+      }
+
+      moderatorUnsubscribeRef.current = aiModeratorBotService.subscribeToConversationForModeration(
+        selectedConversation.id,
+        (message) => {
+          aiModeratorBotService.monitorMessage(selectedConversation.id, message);
+        }
+      );
+    }
+
+    return () => {
+      if (moderatorUnsubscribeRef.current) {
+        moderatorUnsubscribeRef.current();
+        moderatorUnsubscribeRef.current = null;
+      }
+    };
+  }, [selectedConversation]);
 
   const handleSendMessage = async (message: string, file?: File) => {
     if (!currentUser || !selectedConversation || !message.trim()) return;
@@ -93,6 +120,21 @@ export default function CommunityPageNew() {
     setSelectedConversation(conversation);
   };
 
+  const handleNavigateToMessage = (conversationId: string, messageId: string) => {
+    const conversation = conversations.find((c) => c.id === conversationId);
+    if (conversation) {
+      setSelectedConversation(conversation);
+      setTimeout(() => {
+        const messageElement = document.getElementById(`message-${messageId}`);
+        if (messageElement) {
+          messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          messageElement.classList.add('animate-pulse');
+          setTimeout(() => messageElement.classList.remove('animate-pulse'), 2000);
+        }
+      }, 100);
+    }
+  };
+
   if (!currentUser) return null;
 
   const chatAccess = checkFeatureAccess(currentUser, 'chat');
@@ -116,7 +158,13 @@ export default function CommunityPageNew() {
           onSelectConversation={handleSelectConversation}
         />
       }
-      navbar={<TopNavChat conversation={selectedConversation} />}
+      navbar={
+        <TopNavChat
+          conversation={selectedConversation}
+          currentUserId={currentUser.uid}
+          onNavigateToMessage={handleNavigateToMessage}
+        />
+      }
       messages={
         selectedConversation ? (
           <MessageList
@@ -144,6 +192,7 @@ export default function CommunityPageNew() {
             onTyping={startTyping}
             disabled={sending}
             placeholder={`Message ${selectedConversation.title}...`}
+            conversationMembers={selectedConversation.members || []}
           />
         ) : (
           <div className="p-4 text-center text-gray-400 text-sm">

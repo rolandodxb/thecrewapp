@@ -6,6 +6,7 @@ interface MessageBubbleProps {
   senderRole: 'student' | 'mentor' | 'governor';
   createdAt: Timestamp;
   isOwn: boolean;
+  messageId?: string;
 }
 
 export default function MessageBubble({
@@ -14,6 +15,7 @@ export default function MessageBubble({
   senderRole,
   createdAt,
   isOwn,
+  messageId,
 }: MessageBubbleProps) {
   const formatTime = (timestamp: Timestamp | null) => {
     if (!timestamp) return '';
@@ -59,7 +61,7 @@ export default function MessageBubble({
   };
 
   return (
-    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}>
+    <div id={messageId ? `message-${messageId}` : undefined} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-[75%] md:max-w-[60%]`}>
         {!isOwn && senderName && (
           <div className="mb-1 px-2">

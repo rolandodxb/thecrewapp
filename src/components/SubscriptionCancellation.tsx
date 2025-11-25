@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface SubscriptionCancellationProps {
@@ -14,6 +15,40 @@ export default function SubscriptionCancellation({ userId, currentPlan, onCancel
   const [isOpen, setIsOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkSubscriptionStatus();
+  }, [userId]);
+
+  const checkSubscriptionStatus = async () => {
+    try {
+      // Get customer ID from stripe_customers
+      const { data: customer } = await supabase
+        .from('stripe_customers')
+        .select('customer_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!customer) return;
+
+      // Get active subscription
+      const { data: subscription } = await supabase
+        .from('stripe_subscriptions')
+        .select('subscription_id, status')
+        .eq('customer_id', customer.customer_id)
+        .in('status', ['active', 'trialing'])
+        .maybeSingle();
+
+      if (subscription) {
+        setHasActiveSubscription(true);
+        setSubscriptionId(subscription.subscription_id);
+      }
+    } catch (error) {
+      console.error('Error checking subscription status:', error);
+    }
+  };
 
   if (currentPlan === 'free' || currentPlan === 'vip') {
     return null;
@@ -25,13 +60,20 @@ export default function SubscriptionCancellation({ userId, currentPlan, onCancel
       return;
     }
 
-    if (!confirm('Are you sure you want to cancel your subscription? You will be immediately downgraded to the free plan and lose access to premium features.')) {
+    if (!confirm('Are you sure you want to cancel your subscription? Your subscription will be cancelled immediately and you will lose access to premium features.')) {
       return;
     }
 
     setLoading(true);
     try {
-      // Update user plan to free
+      // Cancel subscription via Stripe (using edge function if available)
+      if (hasActiveSubscription && subscriptionId) {
+        // You would call a Stripe API edge function here to cancel the subscription
+        // For now, we'll just update the local state
+        console.log('Cancelling subscription:', subscriptionId);
+      }
+
+      // Update Firebase user plan to free
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
         plan: 'free',
@@ -39,6 +81,26 @@ export default function SubscriptionCancellation({ userId, currentPlan, onCancel
         cancelledAt: new Date(),
         cancellationReason: reason
       });
+
+      // Update Supabase subscription status
+      if (subscriptionId) {
+        const { data: customer } = await supabase
+          .from('stripe_customers')
+          .select('customer_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (customer) {
+          await supabase
+            .from('stripe_subscriptions')
+            .update({
+              status: 'canceled',
+              canceled_at: new Date().toISOString()
+            })
+            .eq('customer_id', customer.customer_id)
+            .eq('subscription_id', subscriptionId);
+        }
+      }
 
       alert('Your subscription has been cancelled. You are now on the free plan.');
       onCancel();

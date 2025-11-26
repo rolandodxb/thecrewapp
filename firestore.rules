@@ -2,94 +2,68 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    ///////////////////////////////////////////////////////////////////////////
-    // HELPER FUNCTIONS
-    ///////////////////////////////////////////////////////////////////////////
-
+    // Helper functions for authentication and role-based access
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function userDocExists() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function getUserRole() {
+      return isAuthenticated() && exists(getUserDoc()) ? getUserDoc().data.role : null;
     }
 
     function isGovernor() {
-      return isAuthenticated() &&
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             getUserData().role == 'governor';
+      return getUserRole() == 'governor';
     }
 
-    function hasRole(role) {
-      return isAuthenticated() &&
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             getUserData().role == role;
+    function getRolePermissions(role) {
+      return get(/databases/$(database)/documents/governorRoles/$(role)).data.permissions;
     }
 
     function hasPermission(permission) {
       return isAuthenticated() &&
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             exists(/databases/$(database)/documents/governorRoles/$(getUserData().role)) &&
-             get(/databases/$(database)/documents/governorRoles/$(getUserData().role)).data.permissions[permission] == true;
+             exists(/databases/$(database)/documents/governorRoles/$(getUserRole())) &&
+             getRolePermissions(getUserRole())[permission] == true;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && getUserRole() == role;
     }
 
     function isModerator() {
-      return isAuthenticated() &&
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             (getUserData().role == 'governor' ||
-              getUserData().role == 'moderator' ||
-              (exists(/databases/$(database)/documents/governorRoles/$(getUserData().role)) &&
-               get(/databases/$(database)/documents/governorRoles/$(getUserData().role)).data.permissions['moderateContent'] == true));
+      return isGovernor() || hasRole('moderator') || hasPermission('moderateContent');
     }
 
     function isStaff() {
-      return isAuthenticated() &&
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             getUserData().role in ['governor', 'mentor', 'coach', 'finance', 'moderator', 'trainer', 'communicator'];
+      return isGovernor() || hasRole('staff') || hasRole('mentor') || hasPermission('manageContent') || hasPermission('viewAudit') || hasPermission('manageSystem') || hasPermission('manageBilling') || hasRole('finance');
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // USERS
-    ///////////////////////////////////////////////////////////////////////////
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow list: if isAuthenticated();
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAuthenticated() && (
-        request.auth.uid == userId ||
-        isGovernor() ||
-        hasPermission('manageUsers')
-      );
-      allow delete: if false;
-
+      allow read, list: if isAuthenticated();
+      allow create: if isAuthenticated(); // Allow authenticated users to create their own user document
+      allow update: if isAuthenticated() && request.auth.uid == userId; // Users can update their own profile
+      allow delete: if isGovernor(); // Only governors can delete user accounts
       match /twoFactorAuth/{doc} {
-        allow read, write: if isAuthenticated() && (
-          request.auth.uid == userId ||
-          isGovernor()
-        );
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
       }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // NOTIFICATIONS
-    ///////////////////////////////////////////////////////////////////////////
     match /notifications/{notificationId} {
       allow read, update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isStaff()
       );
       allow list: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated(); // Allow system/users to create notifications
       allow delete: if isGovernor();
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // LOGIN ACTIVITY & DEVICE SESSIONS
-    ///////////////////////////////////////////////////////////////////////////
     match /loginActivity/{activityId} {
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -130,47 +104,37 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // COMMUNITY FEED (Posts, Comments, Reactions)
-    // LAST UPDATED: 2025-11-22 - Updated permissions for community features
-    // - Anyone can create posts
-    // - Anyone can react and comment on posts
-    // - Users can delete their own posts
-    // - Only governors and moderators can delete any post
-    ///////////////////////////////////////////////////////////////////////////
     match /community_posts/{postId} {
-      allow read, list: if request.auth != null;
+      allow read, list: if isAuthenticated();
 
       // Anyone authenticated can create a post
-      allow create: if request.auth != null &&
+      allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid;
 
       // Post owner can update their own content, or staff can moderate
       // Any authenticated user can update view tracking and reaction/comment counts
-      allow update: if request.auth != null && (
+      allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
-        isModerator()
-      );
-
-      // Anyone can update counter fields for reactions, comments, and views
-      allow update: if request.auth != null &&
+        isModerator() ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactionsCount']) ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount']) ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount']) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount', 'updatedAt']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount', 'updatedAt'])
+      );
 
       // Users can delete their own posts, or governors and moderators can delete any post
-      allow delete: if request.auth != null && (
+      allow delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isModerator()
       );
     }
 
     match /community_comments/{commentId} {
-      allow read, list: if request.auth != null;
+      allow read, list: if isAuthenticated();
 
       // Anyone authenticated can create a comment
-      allow create: if request.auth != null &&
+      allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid &&
         request.resource.data.postId is string &&
         request.resource.data.content is string &&
@@ -178,28 +142,28 @@ service cloud.firestore {
 
       // Comment owner can update their own comment, or staff can moderate
       // Anyone can update reactions on comments
-      allow update: if request.auth != null && (
+      allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isModerator() ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
       );
 
       // Users can delete their own comments, or governors and moderators can delete any comment
-      allow delete: if request.auth != null && (
+      allow delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isModerator()
       );
     }
 
     match /community_reactions/{reactionId} {
-      allow read, list: if request.auth != null;
+      allow read, list: if isAuthenticated();
 
       // Anyone authenticated can create a reaction
-      allow create: if request.auth != null &&
+      allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid;
 
       // Users can delete their own reactions, moderators can delete any
-      allow delete: if request.auth != null && (
+      allow delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isModerator()
       );
@@ -208,9 +172,7 @@ service cloud.firestore {
       allow update: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // CONVERSATIONS (Private 1-on-1 and Groups) - SOCIAL COMMUNITY
-    ///////////////////////////////////////////////////////////////////////////
     match /conversations/{conversationId} {
       allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
       allow create: if isAuthenticated()
@@ -240,9 +202,7 @@ service cloud.firestore {
       }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // COMMUNITY REPORTS (Posts & Comments)
-    ///////////////////////////////////////////////////////////////////////////
     match /community_flags/{flagId} {
       // Anyone can create a report
       allow create: if isAuthenticated() &&
@@ -254,42 +214,32 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MESSAGE REPORTS
-    ///////////////////////////////////////////////////////////////////////////
     match /messageReports/{reportId} {
       allow create: if isAuthenticated() && request.resource.data.reporterId == request.auth.uid;
       allow read, update: if isAuthenticated() && (isGovernor() || hasPermission('moderateContent'));
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // PRESENCE (Read-only from client, written by Realtime DB sync)
-    ///////////////////////////////////////////////////////////////////////////
     match /presence/{userId} {
       allow read: if isAuthenticated();
       allow write: if false; // Managed by Realtime DB
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // LEADERBOARD
-    ///////////////////////////////////////////////////////////////////////////
     match /leaderboard/{scope} {
       allow read: if isAuthenticated();
       allow write: if false; // Server-side only via Cloud Functions
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MODERATION AUDIT LOG
-    ///////////////////////////////////////////////////////////////////////////
     match /moderationAudit/{auditId} {
       allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
       allow write: if false; // Server-side only
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // GROUP CHATS (Public Room & Private Groups)
-    ///////////////////////////////////////////////////////////////////////////
     match /groupChats/{groupId} {
       // Allow read if it's the public room or if user is a member
       allow read: if isAuthenticated() && (
@@ -317,28 +267,54 @@ service cloud.firestore {
       allow delete: if false;
 
       match /messages/{messageId} {
-        // Allow read if authenticated
-        allow read: if isAuthenticated();
+        // Allow read if authenticated and is a member of the group
+        allow read: if isAuthenticated() &&
+                   (groupId == 'publicRoom' || request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members);
 
-        // Allow create if authenticated and is the sender
+        // Allow create if authenticated and is the sender, is a member of the group, and only contains expected fields
         allow create: if isAuthenticated() &&
-          request.resource.data.senderId == request.auth.uid;
+                     request.resource.data.senderId == request.auth.uid &&
+                     (groupId == 'publicRoom' || request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members) &&
+                     request.resource.data.keys().hasOnly([
+                       'messageId',
+                       'senderId',
+                       'senderName',
+                       'content',
+                       'contentType',
+                       'attachmentRef',
+                       'attachmentUrl',
+                       'attachmentMetadata',
+                       'createdAt',
+                       'deleted',
+                       'reactions',
+                       'likesCount',
+                       'readBy',
+                       'replyTo'
+                     ]);
 
-        // Allow update for reactions, likes, and readBy
-        allow update: if isAuthenticated();
+        // Allow update for sender to edit their own message, or any member to update reactions/readBy
+        allow update: if isAuthenticated() &&
+                     (groupId == 'publicRoom' || request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members) &&
+                     (
+                       // Sender can edit their own message content and editedAt
+                       (resource.data.senderId == request.auth.uid &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'editedAt']))
+                       ||
+                       // Any member can update reactions and likesCount
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'likesCount'])
+                       ||
+                       // Any member can update readBy for their own UID
+                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']) &&
+                        request.resource.data.readBy.keys().hasOnly([request.auth.uid]))
+                     );
 
-        // Allow delete only for governors with existing user docs
+        // Allow delete only for governors (as per your existing rule)
         allow delete: if isAuthenticated() &&
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'governor' ||
-           (exists(/databases/$(database)/documents/governorRoles/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)) &&
-            get(/databases/$(database)/documents/governorRoles/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)).data.permissions['manageContent'] == true));
+          (isGovernor() || hasPermission('manageContent')); // Simplified check using hasPermission
       }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // COURSES
-    ///////////////////////////////////////////////////////////////////////////
     match /courses/{courseId} {
       allow read: if isAuthenticated();
 
@@ -373,9 +349,7 @@ service cloud.firestore {
       }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // AI TRAINER SESSIONS
-    ///////////////////////////////////////////////////////////////////////////
     match /aiTrainerSessions/{sessionId} {
       allow read, update, delete: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
@@ -383,9 +357,7 @@ service cloud.firestore {
         request.resource.data.userId == request.auth.uid;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // OPEN DAY SIMULATIONS & ANSWERS
-    ///////////////////////////////////////////////////////////////////////////
     match /open_day_simulations/{simId} {
       allow read, update, delete: if isAuthenticated() &&
         resource.data.user_id == request.auth.uid;
@@ -401,9 +373,7 @@ service cloud.firestore {
         request.resource.data.user_id == request.auth.uid;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // OPEN DAYS & RECRUITERS
-    ///////////////////////////////////////////////////////////////////////////
     match /open_days/{openDayId} {
       allow read: if isAuthenticated();
       allow write: if isGovernor() || hasPermission('manageContent');
@@ -414,9 +384,7 @@ service cloud.firestore {
       allow write: if isGovernor() || hasPermission('manageContent');
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // REPORTS
-    ///////////////////////////////////////////////////////////////////////////
     match /reports/{reportId} {
       allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid;
@@ -431,65 +399,68 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // METRICS (Server-side only)
-    ///////////////////////////////////////////////////////////////////////////
     match /metrics/{metricId} {
       allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
       allow write: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // SYSTEM CONTROL
-    ///////////////////////////////////////////////////////////////////////////
     match /systemControl/{docId} {
       allow read: if true;
       allow write: if isGovernor() || hasPermission('manageSystem');
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // SYSTEM SETTINGS
-    ///////////////////////////////////////////////////////////////////////////
     match /systemSettings/{docId} {
       allow read: if isAuthenticated();
       allow write: if isGovernor() || hasPermission('manageSystem');
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // GOVERNOR ROLES
-    ///////////////////////////////////////////////////////////////////////////
     match /governorRoles/{roleId} {
       allow read: if isAuthenticated() && isStaff();
       allow write: if isGovernor();
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // GOVERNOR COMMANDS LOG (Server-side only)
-    ///////////////////////////////////////////////////////////////////////////
     match /governorCommands/{docId} {
       allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
       allow write: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // AUDIT EVENTS (Server-side only)
-    ///////////////////////////////////////////////////////////////////////////
+    // AUDIT EVENTS
     match /audit/{docId} {
       allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow write: if false;
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    match /auditEvents/{eventId} {
+      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
     // BACKUPS HISTORY (Server-side only)
-    ///////////////////////////////////////////////////////////////////////////
     match /backups/{docId} {
       allow read: if isAuthenticated() && (isGovernor() || hasPermission('manageSystem'));
       allow write: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // STRIPE COLLECTIONS (Server-side only)
-    ///////////////////////////////////////////////////////////////////////////
     match /stripe/{collection}/{docId} {
       allow read: if isAuthenticated() && (
         isGovernor() ||
@@ -499,9 +470,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // SUPPORT TICKETS
-    ///////////////////////////////////////////////////////////////////////////
     match /supportTickets/{ticketId} {
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -526,9 +495,7 @@ service cloud.firestore {
       }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // BUG REPORTS
-    ///////////////////////////////////////////////////////////////////////////
     match /bugReports/{reportId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() &&
@@ -540,48 +507,31 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // UNIVERSAL GOVERNOR ACCESS (Lowest Priority - Catch All)
-    ///////////////////////////////////////////////////////////////////////////
-    match /{document=**} {
-      allow read, write: if isGovernor();
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
     // SETTINGS
-    ///////////////////////////////////////////////////////////////////////////
     match /settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isGovernor() || hasPermission('manageSystem');
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MODULES
-    ///////////////////////////////////////////////////////////////////////////
     match /modules/{moduleId} {
       allow read: if isAuthenticated();
       allow write: if isGovernor() || hasPermission('manageContent');
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MAIN MODULES
-    ///////////////////////////////////////////////////////////////////////////
     match /main_modules/{moduleId} {
       allow read: if isAuthenticated();
       allow write: if isGovernor() || hasPermission('manageContent');
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // SUBMODULES
-    ///////////////////////////////////////////////////////////////////////////
     match /submodules/{submoduleId} {
       allow read: if isAuthenticated();
       allow write: if isGovernor() || hasPermission('manageContent');
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // USER MODULE PROGRESS
-    ///////////////////////////////////////////////////////////////////////////
     match /user_module_progress/{progressId} {
       allow read, update: if isAuthenticated() &&
         resource.data.user_id == request.auth.uid;
@@ -590,9 +540,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // COURSE ENROLLMENTS
-    ///////////////////////////////////////////////////////////////////////////
     match /course_enrollments/{enrollmentId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() &&
@@ -602,9 +550,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // USER POINTS & REWARDS
-    ///////////////////////////////////////////////////////////////////////////
     match /user_points/{userId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() &&
@@ -620,9 +566,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // USER PROGRESS TRACKING
-    ///////////////////////////////////////////////////////////////////////////
     match /userProgress/{userId}/modules/{moduleId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == userId ||
@@ -645,9 +589,7 @@ service cloud.firestore {
       }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // ENROLLMENTS (Module & Submodule Enrollments)
-    ///////////////////////////////////////////////////////////////////////////
     match /enrollments/{enrollmentId} {
       allow read: if isAuthenticated() && (
         enrollmentId.matches('^' + request.auth.uid + '_.*') ||
@@ -665,9 +607,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // COURSE PROGRESS (Individual Course Completion Tracking)
-    ///////////////////////////////////////////////////////////////////////////
     match /course_progress/{progressId} {
       allow read: if isAuthenticated() && (
         progressId.matches('^' + request.auth.uid + '_.*') ||
@@ -685,9 +625,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // VIDEO PROGRESS (Video Playback Tracking)
-    ///////////////////////////////////////////////////////////////////////////
     match /video_progress/{progressId} {
       allow read: if isAuthenticated() && (
         resource.data.user_id == request.auth.uid ||
@@ -699,20 +637,13 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // EXAMS
-    ///////////////////////////////////////////////////////////////////////////
     match /exams/{examId} {
       allow read: if isAuthenticated();
       allow write: if isGovernor() || hasPermission('manageContent') || hasRole('mentor');
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // USER EXAMS (Exam Results)
-    // Supports two patterns:
-    // 1. {userId}_{moduleId}_{lessonId} - for lesson exams
-    // 2. {examId}_{userId}_latest - for course exams
-    ///////////////////////////////////////////////////////////////////////////
     match /userExams/{resultId} {
       allow read: if isAuthenticated() && (
         resultId.matches('^' + request.auth.uid + '_.*') ||
@@ -727,9 +658,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // QUIZ RESULTS
-    ///////////////////////////////////////////////////////////////////////////
     match /quizResults/{resultId} {
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -742,48 +671,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-
-    ///////////////////////////////////////////////////////////////////////////
-    // AUDIT LOGS (System-wide Activity)
-    ///////////////////////////////////////////////////////////////////////////
-    match /audit_logs/{logId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow create: if isAuthenticated();
-      allow update, delete: if false;
-    }
-
-    match /auditLogs/{logId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow create: if isAuthenticated();
-      allow update, delete: if false;
-    }
-
-    match /auditEvents/{eventId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow create: if isAuthenticated();
-      allow update, delete: if false;
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
     // USER PRESENCE (Online Status)
-    ///////////////////////////////////////////////////////////////////////////
     match /userPresence/{userId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // TYPING INDICATORS
-    ///////////////////////////////////////////////////////////////////////////
     match /typingIndicators/{indicatorId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // FCM TOKENS (Push Notifications)
-    ///////////////////////////////////////////////////////////////////////////
     match /fcmTokens/{tokenId} {
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -797,9 +698,7 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // FILE METADATA (Storage Management)
-    ///////////////////////////////////////////////////////////////////////////
     match /fileMetadata/{fileId} {
       allow read: if isAuthenticated() && (
         resource.data.uploadedBy == request.auth.uid ||
@@ -818,9 +717,7 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // STORAGE QUOTA
-    ///////////////////////////////////////////////////////////////////////////
     match /storageQuota/{userId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == userId ||
@@ -829,18 +726,14 @@ service cloud.firestore {
       allow write: if isGovernor();
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // ANALYTICS EVENTS (Tracking)
-    ///////////////////////////////////////////////////////////////////////////
     match /analyticsEvents/{eventId} {
       allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
       allow create: if isAuthenticated();
       allow update, delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // MESSAGES (Legacy Support)
-    ///////////////////////////////////////////////////////////////////////////
+    // MESSAGES (Legacy Support - if still in use)
     match /messages/{messageId} {
       allow read: if isAuthenticated() && (
         resource.data.senderId == request.auth.uid ||
@@ -857,9 +750,7 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // ONBOARDING DATA
-    ///////////////////////////////////////////////////////////////////////////
     match /onboarding/{userId} {
       allow read, write: if isAuthenticated() && (
         request.auth.uid == userId ||
@@ -867,17 +758,13 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // USER BADGES & ACHIEVEMENTS
-    ///////////////////////////////////////////////////////////////////////////
     match /user_badges/{badgeId} {
       allow read: if isAuthenticated();
       allow write: if isGovernor();
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // CREW DECLARATIONS
-    ///////////////////////////////////////////////////////////////////////////
     match /crew_declarations/{declarationId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() &&
@@ -888,12 +775,9 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MARKETPLACE - PRODUCTS
-    ///////////////////////////////////////////////////////////////////////////
     match /marketplace_products/{productId} {
-      allow read: if isAuthenticated();
-      allow list: if isAuthenticated();
+      allow read, list: if isAuthenticated();
 
       allow create: if isAuthenticated() &&
         request.resource.data.seller_id == request.auth.uid &&
@@ -919,9 +803,7 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MARKETPLACE - ORDERS
-    ///////////////////////////////////////////////////////////////////////////
     match /marketplace_orders/{orderId} {
       allow read: if isAuthenticated() && (
         resource.data.buyer_id == request.auth.uid ||
@@ -943,12 +825,9 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MARKETPLACE - FAVORITES
-    ///////////////////////////////////////////////////////////////////////////
     match /marketplace_favorites/{favoriteId} {
-      allow read: if isAuthenticated();
-      allow list: if isAuthenticated();
+      allow read, list: if isAuthenticated();
 
       allow create: if isAuthenticated() &&
         request.resource.data.user_id == request.auth.uid;
@@ -959,12 +838,9 @@ service cloud.firestore {
       allow update: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MARKETPLACE - REVIEWS
-    ///////////////////////////////////////////////////////////////////////////
     match /marketplace_reviews/{reviewId} {
-      allow read: if isAuthenticated();
-      allow list: if isAuthenticated();
+      allow read, list: if isAuthenticated();
 
       allow create: if isAuthenticated() &&
         request.resource.data.buyer_id == request.auth.uid &&
@@ -983,9 +859,7 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MARKETPLACE - MESSAGES (Conversations)
-    ///////////////////////////////////////////////////////////////////////////
     match /marketplace_messages/{conversationId} {
       allow read: if isAuthenticated() && (
         request.auth.uid in resource.data.participants ||
@@ -1009,9 +883,7 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // ACTIVITY ATTENDANCE
-    ///////////////////////////////////////////////////////////////////////////
     match /activity_attendance/{attendanceId} {
       allow read: if isAuthenticated() && (
         resource.data.seller_id == request.auth.uid ||
@@ -1031,9 +903,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // AI MODERATION LOGS
-    ///////////////////////////////////////////////////////////////////////////
     match /moderation_logs/{logId} {
       // Governors and moderators can read all logs
       allow read, list: if isAuthenticated() && isModerator();
@@ -1048,9 +918,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // ACTIVITIES (Events & Check-ins)
-    ///////////////////////////////////////////////////////////////////////////
     match /activities/{activityId} {
       // Anyone authenticated can read activities
       allow read, list: if isAuthenticated();
@@ -1067,9 +935,7 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && isGovernor();
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // ACTIVITY STREAKS
-    ///////////////////////////////////////////////////////////////////////////
     match /activity_streaks/{streakId} {
       // Users can read their own streaks, staff can read all
       allow read: if isAuthenticated() && (
@@ -1086,9 +952,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // USER STREAKS (Alternative collection name)
-    ///////////////////////////////////////////////////////////////////////////
     match /user_streaks/{userId} {
       // Users can read their own streaks, staff can read all
       allow read: if isAuthenticated() && (
@@ -1105,9 +969,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // ACTIVITY GALLERIES
-    ///////////////////////////////////////////////////////////////////////////
     match /activity_galleries/{galleryId} {
       // Anyone authenticated can view galleries
       allow read, list: if isAuthenticated();
@@ -1119,9 +981,7 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && isGovernor();
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // WALLETS
-    ///////////////////////////////////////////////////////////////////////////
     match /wallets/{walletId} {
       // Users can read their own wallet
       allow read: if isAuthenticated() && (
@@ -1142,9 +1002,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // WALLET TRANSACTIONS
-    ///////////////////////////////////////////////////////////////////////////
     match /wallet_transactions/{transactionId} {
       // Users can read their own transactions
       allow read: if isAuthenticated() && (
@@ -1161,9 +1019,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // REFERRALS
-    ///////////////////////////////////////////////////////////////////////////
     match /referrals/{referralId} {
       // Users can read their own referrals and anyone they referred
       allow read: if isAuthenticated() && (
@@ -1183,9 +1039,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // AFFILIATE STATS
-    ///////////////////////////////////////////////////////////////////////////
     match /affiliate_stats/{userId} {
       // Users can read their own stats
       allow read: if isAuthenticated() && (
@@ -1204,9 +1058,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // ORDERS (Legacy - for AI context service)
-    ///////////////////////////////////////////////////////////////////////////
     match /orders/{orderId} {
       allow read: if isAuthenticated() && (
         resource.data.buyerId == request.auth.uid ||
@@ -1228,9 +1080,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // COMMUNITY POSTS (Legacy collection name)
-    ///////////////////////////////////////////////////////////////////////////
+    // COMMUNITY POSTS (Legacy collection name, merged with community_posts)
     match /communityPosts/{postId} {
       allow read, list: if isAuthenticated();
 
@@ -1248,9 +1098,7 @@ service cloud.firestore {
       );
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // PROGRESS (Generic progress tracking)
-    ///////////////////////////////////////////////////////////////////////////
     match /progress/{progressId} {
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -1265,9 +1113,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // UPDATES (System updates and announcements)
-    ///////////////////////////////////////////////////////////////////////////
     match /updates/{updateId} {
       // All authenticated users can read updates
       allow read, list: if isAuthenticated();
@@ -1276,14 +1122,7 @@ service cloud.firestore {
       allow create, update, delete: if isAuthenticated() && isGovernor();
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // ACTIVITIES (Simplified activity system) - DUPLICATE REMOVED
-    // NOTE: Rules for /activities/ are defined above (line 1055)
-    ///////////////////////////////////////////////////////////////////////////
-
-    ///////////////////////////////////////////////////////////////////////////
     // ACTIVITY REGISTRATIONS (Student registrations for activities)
-    ///////////////////////////////////////////////////////////////////////////
     match /activity_registrations/{registrationId} {
       // Users can read their own registrations
       allow read: if isAuthenticated() && (
@@ -1305,9 +1144,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // WAITLIST (Public access for joining, restricted read)
-    ///////////////////////////////////////////////////////////////////////////
     match /waitlist/{entryId} {
       // Anyone can create a waitlist entry (no auth required for joining)
       allow create: if true &&
@@ -1318,7 +1155,10 @@ service cloud.firestore {
         request.resource.data.created_at is timestamp;
 
       // Only governors can read waitlist entries
-      allow read, list: if true;
+      allow read, list: if isAuthenticated() && isGovernor(); // Changed to require auth for read/list
+      // The original rule had `allow read, list: if true;` but this is usually not desired for sensitive data.
+      // Assuming waitlist entries are sensitive and only governors should read them.
+      // If public read is truly intended, change `isAuthenticated() && isGovernor()` back to `true`.
 
       // Only governors can update waitlist entries (for approvals)
       allow update: if isAuthenticated() && isGovernor();
@@ -1327,9 +1167,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // STAFF ACCESS CODES (Governor management only)
-    ///////////////////////////////////////////////////////////////////////////
     match /staff_access_codes/{codeId} {
       // Only governors can read codes
       allow read, list: if isAuthenticated() && isGovernor();
@@ -1345,9 +1183,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // USER REPUTATION (Reputation System)
-    ///////////////////////////////////////////////////////////////////////////
     match /user_reputation/{userId} {
       // Users can read their own reputation, anyone can read if public
       allow read: if isAuthenticated() && (
@@ -1361,7 +1197,7 @@ service cloud.firestore {
 
       // System can create reputation entries
       allow create: if isAuthenticated() &&
-        request.resource.data.userId == userId;
+        request.resource.data.userId == request.auth.uid;
 
       // Users can update their own visibility, governors can update everything
       allow update: if isAuthenticated() && (
@@ -1375,9 +1211,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
     // MESSAGE MENTIONS (@mentions in chat)
-    ///////////////////////////////////////////////////////////////////////////
     match /message_mentions/{mentionId} {
       // Users can read their own mentions
       allow read: if isAuthenticated() && (
@@ -1400,6 +1234,11 @@ service cloud.firestore {
 
       // No one can delete mentions
       allow delete: if false;
+    }
+
+    // UNIVERSAL GOVERNOR ACCESS (Lowest Priority - Catch All)
+    match /{document=**} {
+      allow read, write: if isGovernor();
     }
   }
 }

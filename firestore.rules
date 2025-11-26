@@ -2,1241 +2,432 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions for authentication and role-based access
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function getUserDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-
-    function getUserRole() {
-      return isAuthenticated() && exists(getUserDoc()) ? getUserDoc().data.role : null;
-    }
-
     function isGovernor() {
-      return getUserRole() == 'governor';
-    }
-
-    function getRolePermissions(role) {
-      return get(/databases/$(database)/documents/governorRoles/$(role)).data.permissions;
-    }
-
-    function hasPermission(permission) {
       return isAuthenticated() &&
-             exists(/databases/$(database)/documents/governorRoles/$(getUserRole())) &&
-             getRolePermissions(getUserRole())[permission] == true;
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'governor';
     }
 
-    function hasRole(role) {
-      return isAuthenticated() && getUserRole() == role;
-    }
+    // SIMPLE RULE: IF LOGGED IN = YOU CAN DO IT
 
-    function isModerator() {
-      return isGovernor() || hasRole('moderator') || hasPermission('moderateContent');
-    }
-
-    function isStaff() {
-      return isGovernor() || hasRole('staff') || hasRole('mentor') || hasPermission('manageContent') || hasPermission('viewAudit') || hasPermission('manageSystem') || hasPermission('manageBilling') || hasRole('finance');
-    }
-
-    // USERS
     match /users/{userId} {
-      allow read, list: if isAuthenticated();
-      allow create: if isAuthenticated(); // Allow authenticated users to create their own user document
-      allow update: if isAuthenticated() && request.auth.uid == userId; // Users can update their own profile
-      allow delete: if isGovernor(); // Only governors can delete user accounts
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
       match /twoFactorAuth/{doc} {
-        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+        allow read, write: if isAuthenticated();
       }
     }
 
-    // NOTIFICATIONS
     match /notifications/{notificationId} {
-      allow read, update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isStaff()
-      );
-      allow list: if isAuthenticated();
-      allow create: if isAuthenticated(); // Allow system/users to create notifications
-      allow delete: if isGovernor();
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // LOGIN ACTIVITY & DEVICE SESSIONS
     match /loginActivity/{activityId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor() ||
-        hasPermission('viewAudit')
-      );
-      allow list: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
     match /deviceSessions/{sessionId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor()
-      );
-      allow list: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor()
-      );
-      allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
     match /twoFactor/{userId} {
-      allow read, write: if isAuthenticated() && (
-        request.auth.uid == userId ||
-        isGovernor()
-      );
+      allow read, write: if isAuthenticated();
     }
 
-    // COMMUNITY FEED (Posts, Comments, Reactions)
+    // COMMUNITY FEED - STUDENTS = GOVERNORS
     match /community_posts/{postId} {
-      allow read, list: if isAuthenticated();
-
-      // Anyone authenticated can create a post
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-
-      // Post owner can update their own content, or staff can moderate
-      // Any authenticated user can update view tracking and reaction/comment counts
-      allow update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isModerator() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactionsCount']) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount']) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount']) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy', 'viewsCount', 'updatedAt'])
-      );
-
-      // Users can delete their own posts, or governors and moderators can delete any post
-      allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isModerator()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
     match /community_comments/{commentId} {
-      allow read, list: if isAuthenticated();
-
-      // Anyone authenticated can create a comment
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid &&
-        request.resource.data.postId is string &&
-        request.resource.data.content is string &&
-        request.resource.data.content.size() > 0;
-
-      // Comment owner can update their own comment, or staff can moderate
-      // Anyone can update reactions on comments
-      allow update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isModerator() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
-      );
-
-      // Users can delete their own comments, or governors and moderators can delete any comment
-      allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isModerator()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
     match /community_reactions/{reactionId} {
-      allow read, list: if isAuthenticated();
-
-      // Anyone authenticated can create a reaction
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-
-      // Users can delete their own reactions, moderators can delete any
-      allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isModerator()
-      );
-
-      // Reactions cannot be updated, only created or deleted
-      allow update: if false;
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // CONVERSATIONS (Private 1-on-1 and Groups) - SOCIAL COMMUNITY
     match /conversations/{conversationId} {
-      allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
-      allow create: if isAuthenticated()
-                   && request.auth.uid in request.resource.data.members
-                   && request.resource.data.members.size() > 1;
-      allow update: if false; // Updates via callable functions only
-      allow delete: if false;
-
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
       match /messages/{messageId} {
-        allow read: if isAuthenticated() &&
-                   request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members;
-        allow create: if isAuthenticated() &&
-                     request.auth.uid == request.resource.data.senderId &&
-                     request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members &&
-                     request.resource.data.keys().hasOnly(['messageId','senderId','content','contentType','attachmentRef','createdAt','deleted','reactions','readBy','replyTo','likesCount']);
-        allow update: if isAuthenticated() &&
-                     request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.members &&
-                     (
-                       // Only allow updating readBy for own userId
-                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']) &&
-                        request.resource.data.readBy.keys().hasOnly([request.auth.uid]))
-                       ||
-                       // Allow updating reactions
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'likesCount'])
-                     );
-        allow delete: if false; // Deletes via callable functions only
+        allow read, list, create, update: if isAuthenticated();
+        allow delete: if isGovernor();
       }
     }
 
-    // COMMUNITY REPORTS (Posts & Comments)
     match /community_flags/{flagId} {
-      // Anyone can create a report
-      allow create: if isAuthenticated() &&
-        request.resource.data.reporterId == request.auth.uid;
-
-      // Only governors and moderators can read and update reports
-      allow read, update: if isAuthenticated() && isModerator();
-
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // MESSAGE REPORTS
     match /messageReports/{reportId} {
-      allow create: if isAuthenticated() && request.resource.data.reporterId == request.auth.uid;
-      allow read, update: if isAuthenticated() && (isGovernor() || hasPermission('moderateContent'));
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // PRESENCE (Read-only from client, written by Realtime DB sync)
     match /presence/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Managed by Realtime DB
+      allow read, write: if isAuthenticated();
     }
 
-    // LEADERBOARD
-    match /leaderboard/{scope} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Server-side only via Cloud Functions
+    match /userPresence/{userId} {
+      allow read, write: if isAuthenticated();
     }
 
-    // MODERATION AUDIT LOG
-    match /moderationAudit/{auditId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow write: if false; // Server-side only
+    match /typingIndicators/{indicatorId} {
+      allow read, write: if isAuthenticated();
     }
 
-    // GROUP CHATS (Public Room & Private Groups)
+    // GROUP CHATS - STUDENTS = GOVERNORS
     match /groupChats/{groupId} {
-      // Allow read if it's the public room or if user is a member
-      allow read: if isAuthenticated() && (
-        groupId == 'publicRoom' ||
-        (resource.data.members != null && request.auth.uid in resource.data.members)
-      );
-
-      // Allow list for authenticated users to see available groups
-      allow list: if isAuthenticated();
-
-      // Allow create for private groups if user is in members list, or for publicRoom
-      allow create: if isAuthenticated() && (
-        groupId == 'publicRoom' ||
-        (groupId != 'publicRoom' &&
-         request.auth.uid in request.resource.data.members &&
-         request.resource.data.members.size() > 1)
-      );
-
-      // Allow updates to lastMessage for all members
-      allow update: if isAuthenticated() && (
-        groupId == 'publicRoom' ||
-        (resource.data.members != null && request.auth.uid in resource.data.members)
-      );
-
-      allow delete: if false;
-
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
       match /messages/{messageId} {
-        // Allow read if authenticated and is a member of the group
-        allow read: if isAuthenticated() &&
-                   (groupId == 'publicRoom' || request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members);
-
-        // Allow create if authenticated and is the sender, is a member of the group, and only contains expected fields
-        allow create: if isAuthenticated() &&
-                     request.resource.data.senderId == request.auth.uid &&
-                     (groupId == 'publicRoom' || request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members) &&
-                     request.resource.data.keys().hasOnly([
-                       'messageId',
-                       'senderId',
-                       'senderName',
-                       'content',
-                       'contentType',
-                       'attachmentRef',
-                       'attachmentUrl',
-                       'attachmentMetadata',
-                       'createdAt',
-                       'deleted',
-                       'reactions',
-                       'likesCount',
-                       'readBy',
-                       'replyTo'
-                     ]);
-
-        // Allow update for sender to edit their own message, or any member to update reactions/readBy
-        allow update: if isAuthenticated() &&
-                     (groupId == 'publicRoom' || request.auth.uid in get(/databases/$(database)/documents/groupChats/$(groupId)).data.members) &&
-                     (
-                       // Sender can edit their own message content and editedAt
-                       (resource.data.senderId == request.auth.uid &&
-                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'editedAt']))
-                       ||
-                       // Any member can update reactions and likesCount
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'likesCount'])
-                       ||
-                       // Any member can update readBy for their own UID
-                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']) &&
-                        request.resource.data.readBy.keys().hasOnly([request.auth.uid]))
-                     );
-
-        // Allow delete only for governors (as per your existing rule)
-        allow delete: if isAuthenticated() &&
-          (isGovernor() || hasPermission('manageContent')); // Simplified check using hasPermission
+        allow read, list, create, update: if isAuthenticated();
+        allow delete: if isGovernor();
       }
     }
 
-    // COURSES
     match /courses/{courseId} {
-      allow read: if isAuthenticated();
-
-      allow create, update: if isAuthenticated() && (
-        hasRole('mentor') ||
-        isGovernor() ||
-        hasPermission('manageContent')
-      );
-
-      allow delete: if isAuthenticated() && (
-        resource.data.mentorId == request.auth.uid ||
-        isGovernor() ||
-        hasPermission('manageContent')
-      );
-
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
       match /modules/{moduleId} {
-        allow read: if isAuthenticated();
-        allow write: if isAuthenticated() && (
-          hasRole('mentor') ||
-          isGovernor() ||
-          hasPermission('manageContent')
-        );
-
+        allow read, list, write: if isAuthenticated();
         match /lessons/{lessonId} {
-          allow read: if isAuthenticated();
-          allow write: if isAuthenticated() && (
-            hasRole('mentor') ||
-            isGovernor() ||
-            hasPermission('manageContent')
-          );
+          allow read, list, write: if isAuthenticated();
         }
       }
     }
 
-    // AI TRAINER SESSIONS
-    match /aiTrainerSessions/{sessionId} {
-      allow read, update, delete: if isAuthenticated() &&
-        resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
+    match /modules/{moduleId} {
+      allow read, list, write: if isAuthenticated();
     }
 
-    // OPEN DAY SIMULATIONS & ANSWERS
+    match /main_modules/{moduleId} {
+      allow read, list, write: if isAuthenticated();
+    }
+
+    match /submodules/{submoduleId} {
+      allow read, list, write: if isAuthenticated();
+    }
+
+    match /aiTrainerSessions/{sessionId} {
+      allow read, list, create, update, delete: if isAuthenticated();
+    }
+
     match /open_day_simulations/{simId} {
-      allow read, update, delete: if isAuthenticated() &&
-        resource.data.user_id == request.auth.uid;
-      allow list: if isStaff();
-      allow create: if isAuthenticated() &&
-        request.resource.data.user_id == request.auth.uid;
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
     match /open_day_answers/{answerId} {
-      allow read, update, delete: if isAuthenticated() &&
-        resource.data.user_id == request.auth.uid;
-      allow create: if isAuthenticated() &&
-        request.resource.data.user_id == request.auth.uid;
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // OPEN DAYS & RECRUITERS
     match /open_days/{openDayId} {
-      allow read: if isAuthenticated();
-      allow write: if isGovernor() || hasPermission('manageContent');
+      allow read, list, write: if isAuthenticated();
     }
 
     match /recruiters/{recruiterId} {
-      allow read: if isAuthenticated();
-      allow write: if isGovernor() || hasPermission('manageContent');
+      allow read, list, write: if isAuthenticated();
     }
 
-    // REPORTS
     match /reports/{reportId} {
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isStaff()
-      );
-      allow update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor()
-      );
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // METRICS (Server-side only)
-    match /metrics/{metricId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow write: if false;
+    match /bugReports/{reportId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // SYSTEM CONTROL
     match /systemControl/{docId} {
       allow read: if true;
-      allow write: if isGovernor() || hasPermission('manageSystem');
-    }
-
-    // SYSTEM SETTINGS
-    match /systemSettings/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isGovernor() || hasPermission('manageSystem');
-    }
-
-    // GOVERNOR ROLES
-    match /governorRoles/{roleId} {
-      allow read: if isAuthenticated() && isStaff();
       allow write: if isGovernor();
     }
 
-    // GOVERNOR COMMANDS LOG (Server-side only)
-    match /governorCommands/{docId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow write: if false;
+    match /systemSettings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor();
     }
 
-    // AUDIT EVENTS
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor();
+    }
+
+    match /governorRoles/{roleId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor();
+    }
+
+    match /governorCommands/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor();
+    }
+
     match /audit/{docId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow create: if isAuthenticated();
-      allow update, delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
     match /audit_logs/{logId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow create: if isAuthenticated();
-      allow update, delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
     match /auditLogs/{logId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow create: if isAuthenticated();
-      allow update, delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
     match /auditEvents/{eventId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow create: if isAuthenticated();
-      allow update, delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // BACKUPS HISTORY (Server-side only)
-    match /backups/{docId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('manageSystem'));
-      allow write: if false;
+    match /moderationAudit/{auditId} {
+      allow read, list, write: if isAuthenticated();
     }
 
-    // STRIPE COLLECTIONS (Server-side only)
-    match /stripe/{collection}/{docId} {
-      allow read: if isAuthenticated() && (
-        isGovernor() ||
-        hasPermission('manageBilling') ||
-        hasRole('finance')
-      );
-      allow write: if false;
+    match /moderation_logs/{logId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // SUPPORT TICKETS
     match /supportTickets/{ticketId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isStaff()
-      );
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isStaff()
-      );
-      allow delete: if false;
-
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
       match /messages/{messageId} {
-        allow read: if isAuthenticated() && (
-          get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid ||
-          isStaff()
-        );
-        allow create: if isAuthenticated() &&
-          request.resource.data.senderId == request.auth.uid;
-        allow delete: if false;
+        allow read, list, create, update: if isAuthenticated();
+        allow delete: if isGovernor();
       }
     }
 
-    // BUG REPORTS
-    match /bugReports/{reportId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        request.resource.data.reportedBy == request.auth.uid;
-      allow update: if isAuthenticated() && (
-        resource.data.reportedBy == request.auth.uid ||
-        isStaff()
-      );
-      allow delete: if false;
-    }
-
-    // SETTINGS
-    match /settings/{settingId} {
-      allow read: if isAuthenticated();
-      allow write: if isGovernor() || hasPermission('manageSystem');
-    }
-
-    // MODULES
-    match /modules/{moduleId} {
-      allow read: if isAuthenticated();
-      allow write: if isGovernor() || hasPermission('manageContent');
-    }
-
-    // MAIN MODULES
-    match /main_modules/{moduleId} {
-      allow read: if isAuthenticated();
-      allow write: if isGovernor() || hasPermission('manageContent');
-    }
-
-    // SUBMODULES
-    match /submodules/{submoduleId} {
-      allow read: if isAuthenticated();
-      allow write: if isGovernor() || hasPermission('manageContent');
-    }
-
-    // USER MODULE PROGRESS
     match /user_module_progress/{progressId} {
-      allow read, update: if isAuthenticated() &&
-        resource.data.user_id == request.auth.uid;
-      allow create: if isAuthenticated() &&
-        request.resource.data.user_id == request.auth.uid;
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // COURSE ENROLLMENTS
     match /course_enrollments/{enrollmentId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        request.resource.data.user_id == request.auth.uid;
-      allow update: if isAuthenticated() &&
-        resource.data.user_id == request.auth.uid;
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // USER POINTS & REWARDS
+    match /enrollments/{enrollmentId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
+    match /course_progress/{progressId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
+    match /video_progress/{progressId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
+    match /progress/{progressId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
+    match /userProgress/{userId}/modules/{moduleId} {
+      allow read, write: if isAuthenticated();
+      match /lessons/{lessonId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
     match /user_points/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        request.resource.data.user_id == request.auth.uid;
-      allow update: if isAuthenticated() &&
-        resource.data.user_id == request.auth.uid;
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
     match /point_events/{eventId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow delete: if false;
+      allow read, list, create: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // USER PROGRESS TRACKING
-    match /userProgress/{userId}/modules/{moduleId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == userId ||
-        isGovernor()
-      );
-      allow write: if isAuthenticated() && (
-        request.auth.uid == userId ||
-        isGovernor()
-      );
-
-      match /lessons/{lessonId} {
-        allow read: if isAuthenticated() && (
-          request.auth.uid == userId ||
-          isGovernor()
-        );
-        allow write: if isAuthenticated() && (
-          request.auth.uid == userId ||
-          isGovernor()
-        );
-      }
-    }
-
-    // ENROLLMENTS (Module & Submodule Enrollments)
-    match /enrollments/{enrollmentId} {
-      allow read: if isAuthenticated() && (
-        enrollmentId.matches('^' + request.auth.uid + '_.*') ||
-        (resource.exists() && resource.data.user_id == request.auth.uid) ||
-        isGovernor() ||
-        isStaff()
-      );
-      allow list: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        request.resource.data.user_id == request.auth.uid;
-      allow update: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid ||
-        isGovernor()
-      );
-      allow delete: if false;
-    }
-
-    // COURSE PROGRESS (Individual Course Completion Tracking)
-    match /course_progress/{progressId} {
-      allow read: if isAuthenticated() && (
-        progressId.matches('^' + request.auth.uid + '_.*') ||
-        (resource.exists() && resource.data.user_id == request.auth.uid) ||
-        isGovernor() ||
-        isStaff()
-      );
-      allow list: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        request.resource.data.user_id == request.auth.uid;
-      allow update: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid ||
-        isGovernor()
-      );
-      allow delete: if false;
-    }
-
-    // VIDEO PROGRESS (Video Playback Tracking)
-    match /video_progress/{progressId} {
-      allow read: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid ||
-        isGovernor() ||
-        isStaff()
-      );
-      allow create, update: if isAuthenticated() &&
-        request.resource.data.user_id == request.auth.uid;
-      allow delete: if false;
-    }
-
-    // EXAMS
     match /exams/{examId} {
-      allow read: if isAuthenticated();
-      allow write: if isGovernor() || hasPermission('manageContent') || hasRole('mentor');
+      allow read, list, write: if isAuthenticated();
     }
 
-    // USER EXAMS (Exam Results)
     match /userExams/{resultId} {
-      allow read: if isAuthenticated() && (
-        resultId.matches('^' + request.auth.uid + '_.*') ||
-        resultId.matches('.*_' + request.auth.uid + '_.*') ||
-        (resource.exists() && resource.data.userId == request.auth.uid) ||
-        isGovernor() ||
-        isStaff()
-      );
-      allow list: if isAuthenticated();
-      allow create, update: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // QUIZ RESULTS
     match /quizResults/{resultId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor() ||
-        isStaff()
-      );
-      allow list: if isAuthenticated();
-      allow create, update: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // USER PRESENCE (Online Status)
-    match /userPresence/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // TYPING INDICATORS
-    match /typingIndicators/{indicatorId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-    }
-
-    // FCM TOKENS (Push Notifications)
     match /fcmTokens/{tokenId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor()
-      );
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // FILE METADATA (Storage Management)
     match /fileMetadata/{fileId} {
-      allow read: if isAuthenticated() && (
-        resource.data.uploadedBy == request.auth.uid ||
-        isGovernor() ||
-        isStaff()
-      );
-      allow create: if isAuthenticated() &&
-        request.resource.data.uploadedBy == request.auth.uid;
-      allow update: if isAuthenticated() && (
-        resource.data.uploadedBy == request.auth.uid ||
-        isGovernor()
-      );
-      allow delete: if isAuthenticated() && (
-        resource.data.uploadedBy == request.auth.uid ||
-        isGovernor()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // STORAGE QUOTA
     match /storageQuota/{userId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == userId ||
-        isGovernor()
-      );
+      allow read: if isAuthenticated();
       allow write: if isGovernor();
     }
 
-    // ANALYTICS EVENTS (Tracking)
     match /analyticsEvents/{eventId} {
-      allow read: if isAuthenticated() && (isGovernor() || hasPermission('viewAudit'));
-      allow create: if isAuthenticated();
-      allow update, delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // MESSAGES (Legacy Support - if still in use)
-    match /messages/{messageId} {
-      allow read: if isAuthenticated() && (
-        resource.data.senderId == request.auth.uid ||
-        resource.data.recipientId == request.auth.uid ||
-        isGovernor()
-      );
-      allow create: if isAuthenticated() &&
-        request.resource.data.senderId == request.auth.uid;
-      allow update: if isAuthenticated() &&
-        resource.data.senderId == request.auth.uid;
-      allow delete: if isAuthenticated() && (
-        resource.data.senderId == request.auth.uid ||
-        isGovernor()
-      );
-    }
-
-    // ONBOARDING DATA
-    match /onboarding/{userId} {
-      allow read, write: if isAuthenticated() && (
-        request.auth.uid == userId ||
-        isGovernor()
-      );
-    }
-
-    // USER BADGES & ACHIEVEMENTS
-    match /user_badges/{badgeId} {
+    match /metrics/{metricId} {
       allow read: if isAuthenticated();
       allow write: if isGovernor();
     }
 
-    // CREW DECLARATIONS
+    match /leaderboard/{scope} {
+      allow read, list: if isAuthenticated();
+      allow write: if isGovernor();
+    }
+
+    match /messages/{messageId} {
+      allow read, list, create, update, delete: if isAuthenticated();
+    }
+
+    match /onboarding/{userId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /user_badges/{badgeId} {
+      allow read, list, write: if isAuthenticated();
+    }
+
     match /crew_declarations/{declarationId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // MARKETPLACE - PRODUCTS
     match /marketplace_products/{productId} {
-      allow read, list: if isAuthenticated();
-
-      allow create: if isAuthenticated() &&
-        request.resource.data.seller_id == request.auth.uid &&
-        request.resource.data.title is string &&
-        request.resource.data.title.size() > 0 &&
-        request.resource.data.description is string &&
-        request.resource.data.price is number &&
-        request.resource.data.price >= 0 &&
-        request.resource.data.currency is string &&
-        request.resource.data.product_type in ['digital', 'physical', 'service'] &&
-        request.resource.data.status in ['draft', 'published', 'sold', 'archived'];
-
-      allow update: if isAuthenticated() && (
-        resource.data.seller_id == request.auth.uid ||
-        isGovernor() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views_count']) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views_count', 'updatedAt'])
-      );
-
-      allow delete: if isAuthenticated() && (
-        resource.data.seller_id == request.auth.uid ||
-        isGovernor()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // MARKETPLACE - ORDERS
     match /marketplace_orders/{orderId} {
-      allow read: if isAuthenticated() && (
-        resource.data.buyer_id == request.auth.uid ||
-        resource.data.seller_id == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow list: if isAuthenticated();
-
-      allow create: if isAuthenticated() &&
-        request.resource.data.buyer_id == request.auth.uid;
-
-      allow update: if isAuthenticated() && (
-        resource.data.buyer_id == request.auth.uid ||
-        resource.data.seller_id == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // MARKETPLACE - FAVORITES
     match /marketplace_favorites/{favoriteId} {
-      allow read, list: if isAuthenticated();
-
-      allow create: if isAuthenticated() &&
-        request.resource.data.user_id == request.auth.uid;
-
-      allow delete: if isAuthenticated() &&
-        resource.data.user_id == request.auth.uid;
-
-      allow update: if false;
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // MARKETPLACE - REVIEWS
     match /marketplace_reviews/{reviewId} {
-      allow read, list: if isAuthenticated();
-
-      allow create: if isAuthenticated() &&
-        request.resource.data.buyer_id == request.auth.uid &&
-        request.resource.data.rating is number &&
-        request.resource.data.rating >= 1 &&
-        request.resource.data.rating <= 5;
-
-      allow update: if isAuthenticated() && (
-        resource.data.buyer_id == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow delete: if isAuthenticated() && (
-        resource.data.buyer_id == request.auth.uid ||
-        isGovernor()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // MARKETPLACE - MESSAGES (Conversations)
     match /marketplace_messages/{conversationId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid in resource.data.participants ||
-        isGovernor()
-      );
-
-      allow list: if isAuthenticated();
-
-      allow create: if isAuthenticated() &&
-        request.auth.uid in request.resource.data.participants &&
-        request.resource.data.participants.size() == 2;
-
-      allow update: if isAuthenticated() && (
-        request.auth.uid in resource.data.participants ||
-        isGovernor()
-      );
-
-      allow delete: if isAuthenticated() && (
-        request.auth.uid in resource.data.participants ||
-        isGovernor()
-      );
+      allow read, list, create, update, delete: if isAuthenticated();
     }
 
-    // ACTIVITY ATTENDANCE
-    match /activity_attendance/{attendanceId} {
-      allow read: if isAuthenticated() && (
-        resource.data.seller_id == request.auth.uid ||
-        resource.data.attendee_id == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow list: if isAuthenticated();
-
-      allow create: if isAuthenticated();
-
-      allow update: if isAuthenticated() && (
-        resource.data.seller_id == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow delete: if false;
-    }
-
-    // AI MODERATION LOGS
-    match /moderation_logs/{logId} {
-      // Governors and moderators can read all logs
-      allow read, list: if isAuthenticated() && isModerator();
-
-      // System creates logs (server-side or client-side service)
-      allow create: if isAuthenticated();
-
-      // Only governors can update logs (for appeals review)
-      allow update: if isAuthenticated() && isGovernor();
-
-      // No one can delete logs
-      allow delete: if false;
-    }
-
-    // ACTIVITIES (Events & Check-ins)
     match /activities/{activityId} {
-      // Anyone authenticated can read activities
-      allow read, list: if isAuthenticated();
-
-      // Staff and governors can create/update activities
-      // Also allow users to update registeredCount when joining
-      allow create, update: if isAuthenticated() && (
-        isStaff() ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registeredCount']) ||
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registeredCount', 'updatedAt']))
-      );
-
-      // Only governors can delete activities
-      allow delete: if isAuthenticated() && isGovernor();
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // ACTIVITY STREAKS
+    match /activity_attendance/{attendanceId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
     match /activity_streaks/{streakId} {
-      // Users can read their own streaks, staff can read all
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isStaff()
-      );
-
-      allow list: if isAuthenticated();
-
-      // Users can create/update their own streaks
-      allow create, update: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // USER STREAKS (Alternative collection name)
     match /user_streaks/{userId} {
-      // Users can read their own streaks, staff can read all
-      allow read: if isAuthenticated() && (
-        userId == request.auth.uid ||
-        isStaff()
-      );
-
-      allow list: if isAuthenticated();
-
-      // Users can create/update their own streaks
-      allow create, update: if isAuthenticated() &&
-        userId == request.auth.uid;
-
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // ACTIVITY GALLERIES
     match /activity_galleries/{galleryId} {
-      // Anyone authenticated can view galleries
-      allow read, list: if isAuthenticated();
-
-      // Staff can create/update galleries
-      allow create, update: if isAuthenticated() && isStaff();
-
-      // Only governors can delete galleries
-      allow delete: if isAuthenticated() && isGovernor();
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // WALLETS
-    match /wallets/{walletId} {
-      // Users can read their own wallet
-      allow read: if isAuthenticated() && (
-        walletId == request.auth.uid ||
-        isGovernor()
-      );
-
-      // Users can create their own wallet
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-
-      // Wallets can be updated by the user or governors
-      allow update: if isAuthenticated() && (
-        walletId == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow delete: if false;
-    }
-
-    // WALLET TRANSACTIONS
-    match /wallet_transactions/{transactionId} {
-      // Users can read their own transactions
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow list: if isAuthenticated();
-
-      // System creates transactions
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-
-      allow update, delete: if false;
-    }
-
-    // REFERRALS
-    match /referrals/{referralId} {
-      // Users can read their own referrals and anyone they referred
-      allow read: if isAuthenticated() && (
-        resource.data.referrerId == request.auth.uid ||
-        resource.data.referredUserId == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow list: if isAuthenticated();
-
-      // Users can create referrals
-      allow create: if isAuthenticated();
-
-      // Only system can update referrals
-      allow update: if isAuthenticated() && isGovernor();
-
-      allow delete: if false;
-    }
-
-    // AFFILIATE STATS
-    match /affiliate_stats/{userId} {
-      // Users can read their own stats
-      allow read: if isAuthenticated() && (
-        userId == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow list: if isAuthenticated() && isGovernor();
-
-      // System creates/updates stats
-      allow create, update: if isAuthenticated() && (
-        userId == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow delete: if false;
-    }
-
-    // ORDERS (Legacy - for AI context service)
-    match /orders/{orderId} {
-      allow read: if isAuthenticated() && (
-        resource.data.buyerId == request.auth.uid ||
-        resource.data.sellerId == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow list: if isAuthenticated();
-
-      allow create: if isAuthenticated() &&
-        request.resource.data.buyerId == request.auth.uid;
-
-      allow update: if isAuthenticated() && (
-        resource.data.buyerId == request.auth.uid ||
-        resource.data.sellerId == request.auth.uid ||
-        isGovernor()
-      );
-
-      allow delete: if false;
-    }
-
-    // COMMUNITY POSTS (Legacy collection name, merged with community_posts)
-    match /communityPosts/{postId} {
-      allow read, list: if isAuthenticated();
-
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-
-      allow update: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isModerator()
-      );
-
-      allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isModerator()
-      );
-    }
-
-    // PROGRESS (Generic progress tracking)
-    match /progress/{progressId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isStaff()
-      );
-
-      allow list: if isAuthenticated();
-
-      allow create, update: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-
-      allow delete: if false;
-    }
-
-    // UPDATES (System updates and announcements)
-    match /updates/{updateId} {
-      // All authenticated users can read updates
-      allow read, list: if isAuthenticated();
-
-      // Only governors can create/update/delete updates
-      allow create, update, delete: if isAuthenticated() && isGovernor();
-    }
-
-    // ACTIVITY REGISTRATIONS (Student registrations for activities)
     match /activity_registrations/{registrationId} {
-      // Users can read their own registrations
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid || isStaff()
-      );
-
-      // Users can list their own registrations, staff can list all
-      allow list: if isAuthenticated();
-
-      // Users can register themselves, staff can register anyone
-      allow create: if isAuthenticated() && (
-        request.resource.data.userId == request.auth.uid || isStaff()
-      );
-
-      // Only staff can update registrations (for check-ins)
-      allow update: if isAuthenticated() && isStaff();
-
-      // No one can delete registrations
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // WAITLIST (Public access for joining, restricted read)
+    match /wallets/{walletId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
+    match /wallet_transactions/{transactionId} {
+      allow read, list, create: if isAuthenticated();
+      allow update, delete: if isGovernor();
+    }
+
+    match /referrals/{referralId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
+    match /affiliate_stats/{userId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
+    match /orders/{orderId} {
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
+    }
+
+    match /communityPosts/{postId} {
+      allow read, list, create, update, delete: if isAuthenticated();
+    }
+
+    match /updates/{updateId} {
+      allow read, list: if isAuthenticated();
+      allow create, update, delete: if isGovernor();
+    }
+
     match /waitlist/{entryId} {
-      // Anyone can create a waitlist entry (no auth required for joining)
-      allow create: if true &&
-        request.resource.data.name is string &&
-        request.resource.data.name.size() > 0 &&
-        request.resource.data.email is string &&
-        request.resource.data.email.matches('.*@.*\\..*') &&
-        request.resource.data.created_at is timestamp;
-
-      // Only governors can read waitlist entries
-      allow read, list: if isAuthenticated() && isGovernor(); // Changed to require auth for read/list
-      // The original rule had `allow read, list: if true;` but this is usually not desired for sensitive data.
-      // Assuming waitlist entries are sensitive and only governors should read them.
-      // If public read is truly intended, change `isAuthenticated() && isGovernor()` back to `true`.
-
-      // Only governors can update waitlist entries (for approvals)
-      allow update: if isAuthenticated() && isGovernor();
-
-      // No one can delete waitlist entries
-      allow delete: if false;
+      allow create, read, list: if true;
+      allow update, delete: if isGovernor();
     }
 
-    // STAFF ACCESS CODES (Governor management only)
     match /staff_access_codes/{codeId} {
-      // Only governors can read codes
-      allow read, list: if isAuthenticated() && isGovernor();
-
-      // Anyone can check if a code exists (for verification)
-      // This allows the verifyStaffCode function to work
       allow get: if true;
-
-      // Only governors can create/update codes
-      allow create, update: if isAuthenticated() && isGovernor();
-
-      // No one can delete codes
-      allow delete: if false;
+      allow read, list, create, update, delete: if isGovernor();
     }
 
-    // USER REPUTATION (Reputation System)
     match /user_reputation/{userId} {
-      // Users can read their own reputation, anyone can read if public
-      allow read: if isAuthenticated() && (
-        userId == request.auth.uid ||
-        (resource.data.visibilityPublic == true) ||
-        isModerator()
-      );
-
-      // List all reputations (for leaderboard)
-      allow list: if isAuthenticated();
-
-      // System can create reputation entries
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid;
-
-      // Users can update their own visibility, governors can update everything
-      allow update: if isAuthenticated() && (
-        (userId == request.auth.uid &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibilityPublic'])) ||
-        isGovernor() ||
-        isModerator()
-      );
-
-      // No one can delete reputation
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // MESSAGE MENTIONS (@mentions in chat)
     match /message_mentions/{mentionId} {
-      // Users can read their own mentions
-      allow read: if isAuthenticated() && (
-        resource.data.mentionedUserId == request.auth.uid ||
-        resource.data.senderId == request.auth.uid ||
-        isModerator()
-      );
-
-      // Users can list their own mentions
-      allow list: if isAuthenticated();
-
-      // System creates mentions when users send messages
-      allow create: if isAuthenticated();
-
-      // Users can update their own mentions (mark as read)
-      allow update: if isAuthenticated() && (
-        resource.data.mentionedUserId == request.auth.uid ||
-        isModerator()
-      );
-
-      // No one can delete mentions
-      allow delete: if false;
+      allow read, list, create, update: if isAuthenticated();
+      allow delete: if isGovernor();
     }
 
-    // UNIVERSAL GOVERNOR ACCESS (Lowest Priority - Catch All)
+    match /stripe/{collection}/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /backups/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isGovernor();
+    }
+
     match /{document=**} {
       allow read, write: if isGovernor();
     }

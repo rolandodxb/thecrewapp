@@ -31,13 +31,16 @@ export default function ModernSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<string[]>([]);
+  const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
+  const [submenuPosition, setSubmenuPosition] = useState<{ top: number; left: number } | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const groupRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        setHoveredGroup(null);
       }
     }
 
@@ -105,6 +108,12 @@ export default function ModernSidebar() {
           items: [
             { path: '/support', icon: HelpCircle, label: 'Help & Support' },
             { path: '/whats-new', icon: Rss, label: "What's New" }
+          ]
+        },
+        {
+          label: 'Events',
+          items: [
+            { path: '/student-events', icon: Ticket, label: 'My Events' }
           ]
         },
         {
@@ -264,18 +273,22 @@ export default function ModernSidebar() {
 
   const menuGroups = getMenuGroups();
 
-  const toggleGroup = (label: string) => {
-    setOpenGroups(prev =>
-      prev.includes(label)
-        ? prev.filter(g => g !== label)
-        : [...prev, label]
-    );
+  const handleGroupHover = (groupLabel: string) => {
+    const buttonRef = groupRefs.current[groupLabel];
+    if (buttonRef) {
+      const rect = buttonRef.getBoundingClientRect();
+      setSubmenuPosition({
+        top: rect.top,
+        left: rect.right + 8
+      });
+    }
+    setHoveredGroup(groupLabel);
   };
 
   const handleMenuClick = () => {
     setIsOpen(!isOpen);
     if (!isOpen) {
-      setOpenGroups(menuGroups.map(g => g.label));
+      setHoveredGroup(null);
     }
   };
 
@@ -307,93 +320,123 @@ export default function ModernSidebar() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                setIsOpen(false);
+                setHoveredGroup(null);
+              }}
             />
 
-            {/* Menu Panel */}
+            {/* Main Menu Panel - First Bubble */}
             <motion.div
               ref={sidebarRef}
-              initial={{ x: -320, opacity: 0 }}
+              initial={{ x: -280, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -320, opacity: 0 }}
+              exit={{ x: -280, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed top-16 left-4 z-50 w-72 max-h-[calc(100vh-6rem)] overflow-y-auto bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl"
+              className="fixed top-16 left-4 z-50 w-64 max-h-[calc(100vh-6rem)] overflow-y-auto bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl"
             >
-              <div className="p-4 space-y-2">
+              <div className="p-4 space-y-1">
                 {menuGroups.map((group) => (
-                  <div key={group.label}>
-                    <button
-                      onClick={() => toggleGroup(group.label)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                    >
-                      <span className={group.label === 'Account' ? 'text-red-500' : ''}>{group.label}</span>
-                      <ChevronRight
-                        className={`w-4 h-4 transition-transform ${openGroups.includes(group.label) ? 'rotate-90' : ''}`}
-                      />
-                    </button>
-
-                    <AnimatePresence>
-                      {openGroups.includes(group.label) && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden ml-3 mt-1 space-y-1"
-                        >
-                          {group.items.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = location.pathname === item.path;
-                            const isLocked = item.locked && item.feature;
-
-                            return (
-                              <motion.div
-                                key={item.path}
-                                whileHover={{ x: 4 }}
-                                whileTap={{ scale: 0.98 }}
-                              >
-                                <Link
-                                  to={isLocked ? '#' : item.path}
-                                  onClick={(e) => {
-                                    if (!isLocked) {
-                                      setIsOpen(false);
-                                    } else {
-                                      e.preventDefault();
-                                    }
-                                  }}
-                                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-                                    isActive
-                                      ? 'bg-blue-50 text-blue-600 font-medium shadow-sm'
-                                      : isLocked
-                                      ? 'text-gray-400 cursor-not-allowed'
-                                      : item.highlight
-                                      ? 'text-blue-600 hover:bg-blue-50'
-                                      : 'text-gray-700 hover:bg-gray-50'
-                                  }`}
-                                >
-                                  <Icon className="w-4 h-4 flex-shrink-0" />
-                                  <span className="flex-1 truncate">{item.label}</span>
-                                  {isLocked && <Lock className="w-3 h-3" />}
-                                  {item.badge && (
-                                    <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${
-                                      item.badge === 'NEW' ? 'bg-green-100 text-green-700' :
-                                      item.badge === 'PRO' ? 'bg-purple-100 text-purple-700' :
-                                      'bg-gray-100 text-gray-700'
-                                    }`}>
-                                      {item.badge}
-                                    </span>
-                                  )}
-                                </Link>
-                              </motion.div>
-                            );
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                  <button
+                    key={group.label}
+                    ref={(el) => (groupRefs.current[group.label] = el)}
+                    onMouseEnter={() => handleGroupHover(group.label)}
+                    onClick={() => {
+                      if (group.items.length === 1) {
+                        navigate(group.items[0].path);
+                        setIsOpen(false);
+                        setHoveredGroup(null);
+                      }
+                    }}
+                    className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium rounded-xl transition-all ${
+                      group.label === 'Account'
+                        ? 'text-red-500 hover:bg-red-50'
+                        : hoveredGroup === group.label
+                        ? 'bg-gray-100 text-gray-900'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span>{group.label}</span>
+                    {group.items.length > 1 && <ChevronRight className="w-4 h-4 text-gray-400" />}
+                  </button>
                 ))}
               </div>
             </motion.div>
+
+            {/* Submenu Panel - Second Bubble */}
+            <AnimatePresence>
+              {hoveredGroup && submenuPosition && (
+                <motion.div
+                  initial={{ x: -20, opacity: 0, scale: 0.95 }}
+                  animate={{ x: 0, opacity: 1, scale: 1 }}
+                  exit={{ x: -20, opacity: 0, scale: 0.95 }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+                  style={{
+                    position: 'fixed',
+                    top: submenuPosition.top,
+                    left: submenuPosition.left,
+                  }}
+                  onMouseLeave={() => setHoveredGroup(null)}
+                  className="z-50 w-64 max-h-[calc(100vh-8rem)] overflow-y-auto bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl"
+                >
+                  <div className="p-3 space-y-1">
+                    {menuGroups
+                      .find((g) => g.label === hoveredGroup)
+                      ?.items.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = location.pathname === item.path;
+                        const isLocked = item.locked && item.feature;
+
+                        return (
+                          <motion.div
+                            key={item.path}
+                            whileHover={{ x: 4 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <Link
+                              to={isLocked ? '#' : item.path}
+                              onClick={(e) => {
+                                if (!isLocked) {
+                                  setIsOpen(false);
+                                  setHoveredGroup(null);
+                                } else {
+                                  e.preventDefault();
+                                }
+                              }}
+                              className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-all ${
+                                isActive
+                                  ? 'bg-blue-50 text-blue-600 font-medium shadow-sm'
+                                  : isLocked
+                                  ? 'text-gray-400 cursor-not-allowed'
+                                  : item.highlight
+                                  ? 'text-blue-600 hover:bg-blue-50'
+                                  : 'text-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              <Icon className="w-4 h-4 flex-shrink-0" />
+                              <span className="flex-1 truncate">{item.label}</span>
+                              {isLocked && <Lock className="w-3 h-3" />}
+                              {item.badge && (
+                                <span
+                                  className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${
+                                    item.badge === 'NEW'
+                                      ? 'bg-green-100 text-green-700'
+                                      : item.badge === 'PRO'
+                                      ? 'bg-purple-100 text-purple-700'
+                                      : 'bg-gray-100 text-gray-700'
+                                  }`}
+                                >
+                                  {item.badge}
+                                </span>
+                              )}
+                            </Link>
+                          </motion.div>
+                        );
+                      })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </>
         )}
       </AnimatePresence>

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import SystemAnnouncementBanner from '../SystemAnnouncementBanner';
+import GlobalSearchBar from '../GlobalSearchBar';
 
 export default function Navbar() {
   const { currentUser, logout } = useApp();
@@ -144,7 +145,10 @@ export default function Navbar() {
                   className="h-16 md:h-24 w-auto object-contain"
                 />
               </Link>
-              <div className="flex-1 min-w-0 overflow-hidden">
+              <div className="hidden lg:block flex-1 max-w-xl mx-4">
+                <GlobalSearchBar />
+              </div>
+              <div className="flex-1 min-w-0 overflow-hidden lg:hidden">
                 <SystemAnnouncementBanner />
               </div>
             </div>

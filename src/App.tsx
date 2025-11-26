@@ -75,6 +75,7 @@ import WaitlistPage from './pages/WaitlistPage';
 import StaffCodePage from './pages/StaffCodePage';
 import WaitlistDashboard from './pages/governor/WaitlistDashboard';
 import SocialProfilePage from './pages/SocialProfilePage';
+import ConferenceRoomPage from './pages/ConferenceRoomPage';
 
 function MaintenanceScreen({ message }: { message: string }) {
   return (
@@ -162,6 +163,7 @@ function AppContent() {
         <Route path="/activities-manage" element={<StaffActivityManagementPage />} />
         <Route path="/events" element={<StudentEventsPage />} />
         <Route path="/student-events" element={<StudentEventsPage />} />
+        <Route path="/conference/:conferenceId" element={<ConferenceRoomPage />} />
         <Route path="/settings/notifications" element={<NotificationSettingsPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/support-chat" element={<SupportChatPage />} />

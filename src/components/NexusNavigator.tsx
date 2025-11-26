@@ -33,9 +33,9 @@ export default function NexusNavigator({ dashboards, initialIndex = 0 }: NexusNa
 
   const variants = {
     enter: (direction: number) => ({
-      x: direction > 0 ? 1000 : -1000,
+      x: direction > 0 ? '100%' : '-100%',
       opacity: 0,
-      scale: 0.9,
+      scale: 0.95,
     }),
     center: {
       x: 0,
@@ -43,29 +43,29 @@ export default function NexusNavigator({ dashboards, initialIndex = 0 }: NexusNa
       scale: 1,
     },
     exit: (direction: number) => ({
-      x: direction < 0 ? 1000 : -1000,
+      x: direction < 0 ? '100%' : '-100%',
       opacity: 0,
-      scale: 0.9,
+      scale: 0.95,
     }),
   };
 
   return (
-    <div className="relative w-full h-full min-h-screen flex flex-col">
+    <div className="relative w-full h-screen flex flex-col overflow-hidden">
       {/* Title Bar */}
-      <div className="flex-shrink-0 flex items-center justify-center py-6">
+      <div className="flex-shrink-0 flex items-center justify-center py-3 sm:py-4 md:py-6 px-2">
         <motion.div
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="bg-white/90 backdrop-blur-xl px-8 py-3 rounded-full shadow-lg"
+          className="bg-white/90 backdrop-blur-xl px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-2.5 md:py-3 rounded-full shadow-lg max-w-full"
         >
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-semibold text-gray-900 text-center truncate">
             {dashboards[currentIndex]?.title}
           </h2>
         </motion.div>
       </div>
 
       {/* Dashboard Content */}
-      <div className="flex-1 relative overflow-hidden px-4 pb-24">
+      <div className="flex-1 relative overflow-hidden px-2 sm:px-3 md:px-4 lg:px-6 pb-16 sm:pb-20 md:pb-24">
         <AnimatePresence initial={false} custom={direction} mode="wait">
           <motion.div
             key={currentIndex}
@@ -81,30 +81,32 @@ export default function NexusNavigator({ dashboards, initialIndex = 0 }: NexusNa
             }}
             className="absolute inset-0 w-full h-full overflow-y-auto"
           >
-            {dashboards[currentIndex]?.content}
+            <div className="max-w-[1920px] mx-auto">
+              {dashboards[currentIndex]?.content}
+            </div>
           </motion.div>
         </AnimatePresence>
       </div>
 
       {/* Navigation Arrows */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4">
+      <div className="fixed bottom-3 sm:bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 sm:gap-3 md:gap-4">
         {/* Previous Arrow */}
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
           onClick={handlePrev}
           disabled={currentIndex === 0}
-          className={`p-4 rounded-full shadow-2xl transition-all ${
+          className={`p-2 sm:p-3 md:p-4 rounded-full shadow-2xl transition-all ${
             currentIndex === 0
               ? 'bg-gray-300 cursor-not-allowed opacity-50'
               : 'bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white'
           }`}
         >
-          <ChevronLeft className="w-6 h-6" />
+          <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
         </motion.button>
 
         {/* Page Indicators */}
-        <div className="flex items-center gap-2 bg-white/90 backdrop-blur-xl px-4 py-2 rounded-full shadow-lg">
+        <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 bg-white/90 backdrop-blur-xl px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-full shadow-lg">
           {dashboards.map((_, index) => (
             <motion.button
               key={index}
@@ -116,8 +118,8 @@ export default function NexusNavigator({ dashboards, initialIndex = 0 }: NexusNa
               whileTap={{ scale: 0.9 }}
               className={`transition-all rounded-full ${
                 index === currentIndex
-                  ? 'w-8 h-2 bg-gray-900'
-                  : 'w-2 h-2 bg-gray-400 hover:bg-gray-600'
+                  ? 'w-4 sm:w-6 md:w-8 h-1.5 sm:h-2 bg-gray-900'
+                  : 'w-1.5 sm:w-2 h-1.5 sm:h-2 bg-gray-400 hover:bg-gray-600'
               }`}
             />
           ))}
@@ -129,13 +131,13 @@ export default function NexusNavigator({ dashboards, initialIndex = 0 }: NexusNa
           whileTap={{ scale: 0.9 }}
           onClick={handleNext}
           disabled={currentIndex === dashboards.length - 1}
-          className={`p-4 rounded-full shadow-2xl transition-all ${
+          className={`p-2 sm:p-3 md:p-4 rounded-full shadow-2xl transition-all ${
             currentIndex === dashboards.length - 1
               ? 'bg-gray-300 cursor-not-allowed opacity-50'
               : 'bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white'
           }`}
         >
-          <ChevronRight className="w-6 h-6" />
+          <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
         </motion.button>
       </div>
     </div>

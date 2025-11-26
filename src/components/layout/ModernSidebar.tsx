@@ -299,15 +299,15 @@ export default function ModernSidebar() {
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         onClick={handleMenuClick}
-        className="fixed top-4 left-4 z-50 flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-xl rounded-full shadow-lg hover:shadow-xl transition-all"
+        className="fixed top-2 sm:top-3 md:top-4 left-2 sm:left-3 md:left-4 z-50 flex items-center gap-1 sm:gap-1.5 md:gap-2 px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 bg-white/90 backdrop-blur-xl rounded-full shadow-lg hover:shadow-xl transition-all"
       >
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-          <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+        <div className="flex items-center gap-1 sm:gap-1.5">
+          <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 bg-red-500 rounded-full"></div>
+          <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 bg-yellow-500 rounded-full"></div>
+          <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full"></div>
         </div>
-        <span className="text-sm font-medium text-gray-700">Menu</span>
-        <ChevronRight className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+        <span className="text-xs sm:text-sm font-medium text-gray-700">Menu</span>
+        <ChevronRight className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
       </motion.button>
 
       {/* Sidebar Menu */}
@@ -333,9 +333,9 @@ export default function ModernSidebar() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -280, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed top-16 left-4 z-50 w-64 max-h-[calc(100vh-6rem)] overflow-y-auto bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl"
+              className="fixed top-12 sm:top-14 md:top-16 left-2 sm:left-3 md:left-4 z-50 w-56 sm:w-60 md:w-64 lg:w-72 max-h-[calc(100vh-4rem)] sm:max-h-[calc(100vh-5rem)] md:max-h-[calc(100vh-6rem)] overflow-y-auto bg-white/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl"
             >
-              <div className="p-4 space-y-1">
+              <div className="p-2 sm:p-3 md:p-4 space-y-1">
                 {menuGroups.map((group) => (
                   <button
                     key={group.label}
@@ -348,7 +348,7 @@ export default function ModernSidebar() {
                         setHoveredGroup(null);
                       }
                     }}
-                    className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium rounded-xl transition-all ${
+                    className={`w-full flex items-center justify-between px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 text-xs sm:text-sm font-medium rounded-lg sm:rounded-xl transition-all ${
                       group.label === 'Account'
                         ? 'text-red-500 hover:bg-red-50'
                         : hoveredGroup === group.label
@@ -356,8 +356,8 @@ export default function ModernSidebar() {
                         : 'text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    <span>{group.label}</span>
-                    {group.items.length > 1 && <ChevronRight className="w-4 h-4 text-gray-400" />}
+                    <span className="truncate">{group.label}</span>
+                    {group.items.length > 1 && <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />}
                   </button>
                 ))}
               </div>
@@ -377,9 +377,9 @@ export default function ModernSidebar() {
                     left: submenuPosition.left,
                   }}
                   onMouseLeave={() => setHoveredGroup(null)}
-                  className="z-50 w-64 max-h-[calc(100vh-8rem)] overflow-y-auto bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl"
+                  className="z-50 w-56 sm:w-60 md:w-64 lg:w-72 max-h-[calc(100vh-6rem)] sm:max-h-[calc(100vh-7rem)] md:max-h-[calc(100vh-8rem)] overflow-y-auto bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl shadow-2xl"
                 >
-                  <div className="p-3 space-y-1">
+                  <div className="p-2 sm:p-2.5 md:p-3 space-y-1">
                     {menuGroups
                       .find((g) => g.label === hoveredGroup)
                       ?.items.map((item) => {
@@ -403,7 +403,7 @@ export default function ModernSidebar() {
                                   e.preventDefault();
                                 }
                               }}
-                              className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-all ${
+                              className={`flex items-center gap-2 sm:gap-2.5 md:gap-3 px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm transition-all ${
                                 isActive
                                   ? 'bg-blue-50 text-blue-600 font-medium shadow-sm'
                                   : isLocked
@@ -413,12 +413,12 @@ export default function ModernSidebar() {
                                   : 'text-gray-700 hover:bg-gray-50'
                               }`}
                             >
-                              <Icon className="w-4 h-4 flex-shrink-0" />
-                              <span className="flex-1 truncate">{item.label}</span>
-                              {isLocked && <Lock className="w-3 h-3" />}
+                              <Icon className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                              <span className="flex-1 truncate text-left">{item.label}</span>
+                              {isLocked && <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3 flex-shrink-0" />}
                               {item.badge && (
                                 <span
-                                  className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${
+                                  className={`px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold rounded flex-shrink-0 ${
                                     item.badge === 'NEW'
                                       ? 'bg-green-100 text-green-700'
                                       : item.badge === 'PRO'

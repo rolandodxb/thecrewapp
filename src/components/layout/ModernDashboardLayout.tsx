@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Search, Mic, Bell, Settings, User, LogOut } from 'lucide-react';
+import { Search, Mic, Bell, User, LogOut, MoreVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
@@ -50,50 +50,46 @@ export default function ModernDashboardLayout({ children, title }: ModernDashboa
           animate={{ y: 0, opacity: 1 }}
           className="fixed top-2 sm:top-3 md:top-4 right-2 sm:right-3 md:right-4 z-40 flex items-center gap-1.5 sm:gap-2 md:gap-3"
         >
-          {/* Search Bar - Hidden on mobile, shown on tablet+ */}
-          <div className="relative hidden md:block">
+          {/* Search Bar - Hidden on small screens to prevent overlap */}
+          <div className="relative hidden lg:block">
             <Search className="absolute left-3 lg:left-4 top-1/2 -translate-y-1/2 w-3 h-3 lg:w-4 lg:h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search"
-              className="w-40 lg:w-56 xl:w-64 pl-9 lg:pl-11 pr-9 lg:pr-11 py-2 lg:py-2.5 bg-white/90 backdrop-blur-xl rounded-full text-xs lg:text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-lg transition"
+              className="w-40 lg:w-56 xl:w-64 pl-9 lg:pl-11 pr-9 lg:pr-11 py-2 lg:py-2.5 bg-white/90 backdrop-blur-xl rounded-full text-xs lg:text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400 shadow-lg transition"
             />
             <Mic className="absolute right-3 lg:right-4 top-1/2 -translate-y-1/2 w-3 h-3 lg:w-4 lg:h-4 text-gray-400" />
           </div>
 
-          {/* Action Buttons - Responsive sizes */}
+          {/* Notifications Button - Magenta/Pink */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => navigate('/notifications')}
             className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+            title="Notifications"
           >
             <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
           </motion.button>
 
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/settings')}
-            className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
-          >
-            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
-          </motion.button>
-
+          {/* Profile Button - Green */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => navigate('/profile')}
             className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+            title="My Profile"
           >
             <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
           </motion.button>
 
+          {/* Logout Button - White */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleLogout}
             className="p-2 sm:p-2.5 md:p-3 bg-white/90 backdrop-blur-xl text-gray-700 rounded-full shadow-lg hover:shadow-xl transition-all"
+            title="Logout"
           >
             <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
           </motion.button>
@@ -124,10 +120,10 @@ export default function ModernDashboardLayout({ children, title }: ModernDashboa
           </div>
         </div>
 
-        {/* Page Indicator Dots - Responsive */}
-        <div className="fixed bottom-3 sm:bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 sm:gap-2">
-          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-gray-900 rounded-full"></div>
-          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-gray-400 rounded-full"></div>
+        {/* Page Indicator Dots - Smaller size */}
+        <div className="fixed bottom-3 sm:bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 sm:gap-1.5">
+          <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-gray-900 rounded-full"></div>
+          <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-gray-400 rounded-full"></div>
         </div>
       </div>
     </div>

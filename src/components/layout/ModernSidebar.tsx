@@ -1,14 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import {
-  Wallet, Camera, QrCode, Ticket, LayoutDashboard, BookOpen, MessageCircle, HelpCircle, Users,
+  Wallet, Ticket, LayoutDashboard, BookOpen, MessageCircle, HelpCircle, Users,
   GraduationCap, Brain, Plane, Briefcase, Crown, Lock, Calendar, UserCircle, Zap, Shield,
   Trophy, TrendingUp, BarChart3, Flag, HardDrive, Clock, Rss, ShoppingBag, DollarSign,
-  Package, ClipboardList, Play, UserPlus, Link as LinkIcon, ChevronRight, ChevronDown,
-  Settings, ShieldCheck, Activity, Mail, Bell, UserCheck, FileText
+  Package, ClipboardList, Play, UserPlus, Link as LinkIcon, ChevronRight,
+  Settings, UserCheck, Video
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { checkFeatureAccess, Feature } from '../../utils/featureAccess';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -30,15 +29,15 @@ interface MenuGroup {
 export default function ModernSidebar() {
   const { currentUser } = useApp();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
         setIsOpen(false);
-        setOpenGroup(null);
       }
     }
 
@@ -89,7 +88,8 @@ export default function ModernSidebar() {
             { path: '/recruiters', icon: Briefcase, label: 'Career', locked: !recruitersAccess.allowed, feature: 'recruiters' as Feature },
             { path: '/open-days', icon: Calendar, label: 'Open Days', locked: !openDaysAccess.allowed, feature: 'opendays' as Feature },
             { path: '/student-events', icon: Ticket, label: 'Events' },
-            { path: '/marketplace', icon: ShoppingBag, label: 'Shop' }
+            { path: '/marketplace', icon: ShoppingBag, label: 'Shop' },
+            { path: '/my-orders', icon: Package, label: 'My Orders' }
           ]
         },
         {
@@ -103,13 +103,8 @@ export default function ModernSidebar() {
         {
           label: 'Tools',
           items: [
-            { path: '/support', icon: HelpCircle, label: 'Help & Support' }
-          ]
-        },
-        {
-          label: 'Events',
-          items: [
-            { path: '/student-events', icon: Ticket, label: 'My Events' }
+            { path: '/support', icon: HelpCircle, label: 'Help & Support' },
+            { path: '/whats-new', icon: Rss, label: "What's New" }
           ]
         },
         {
@@ -270,16 +265,27 @@ export default function ModernSidebar() {
   const menuGroups = getMenuGroups();
 
   const toggleGroup = (label: string) => {
-    setOpenGroup(openGroup === label ? null : label);
+    setOpenGroups(prev =>
+      prev.includes(label)
+        ? prev.filter(g => g !== label)
+        : [...prev, label]
+    );
+  };
+
+  const handleMenuClick = () => {
+    setIsOpen(!isOpen);
+    if (!isOpen) {
+      setOpenGroups(menuGroups.map(g => g.label));
+    }
   };
 
   return (
     <>
-      {/* Menu Button - macOS style traffic lights */}
+      {/* Menu Button */}
       <motion.button
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleMenuClick}
         className="fixed top-4 left-4 z-50 flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-xl rounded-full shadow-lg hover:shadow-xl transition-all"
       >
         <div className="flex items-center gap-1.5">
@@ -314,22 +320,20 @@ export default function ModernSidebar() {
               className="fixed top-16 left-4 z-50 w-72 max-h-[calc(100vh-6rem)] overflow-y-auto bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl"
             >
               <div className="p-4 space-y-2">
-                {menuGroups.map((group, index) => (
+                {menuGroups.map((group) => (
                   <div key={group.label}>
                     <button
                       onClick={() => toggleGroup(group.label)}
                       className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
                     >
                       <span className={group.label === 'Account' ? 'text-red-500' : ''}>{group.label}</span>
-                      {group.items.length > 1 && (
-                        <ChevronRight
-                          className={`w-4 h-4 transition-transform ${openGroup === group.label ? 'rotate-90' : ''}`}
-                        />
-                      )}
+                      <ChevronRight
+                        className={`w-4 h-4 transition-transform ${openGroups.includes(group.label) ? 'rotate-90' : ''}`}
+                      />
                     </button>
 
                     <AnimatePresence>
-                      {(openGroup === group.label || group.items.length === 1) && (
+                      {openGroups.includes(group.label) && (
                         <motion.div
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
@@ -343,38 +347,44 @@ export default function ModernSidebar() {
                             const isLocked = item.locked && item.feature;
 
                             return (
-                              <Link
+                              <motion.div
                                 key={item.path}
-                                to={isLocked ? '#' : item.path}
-                                onClick={() => {
-                                  if (!isLocked) {
-                                    setIsOpen(false);
-                                    setOpenGroup(null);
-                                  }
-                                }}
-                                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-                                  isActive
-                                    ? 'bg-blue-50 text-blue-600 font-medium'
-                                    : isLocked
-                                    ? 'text-gray-400 cursor-not-allowed'
-                                    : item.highlight
-                                    ? 'text-blue-600 hover:bg-blue-50'
-                                    : 'text-gray-700 hover:bg-gray-50'
-                                }`}
+                                whileHover={{ x: 4 }}
+                                whileTap={{ scale: 0.98 }}
                               >
-                                <Icon className="w-4 h-4 flex-shrink-0" />
-                                <span className="flex-1 truncate">{item.label}</span>
-                                {isLocked && <Lock className="w-3 h-3" />}
-                                {item.badge && (
-                                  <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${
-                                    item.badge === 'NEW' ? 'bg-green-100 text-green-700' :
-                                    item.badge === 'PRO' ? 'bg-purple-100 text-purple-700' :
-                                    'bg-gray-100 text-gray-700'
-                                  }`}>
-                                    {item.badge}
-                                  </span>
-                                )}
-                              </Link>
+                                <Link
+                                  to={isLocked ? '#' : item.path}
+                                  onClick={(e) => {
+                                    if (!isLocked) {
+                                      setIsOpen(false);
+                                    } else {
+                                      e.preventDefault();
+                                    }
+                                  }}
+                                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
+                                    isActive
+                                      ? 'bg-blue-50 text-blue-600 font-medium shadow-sm'
+                                      : isLocked
+                                      ? 'text-gray-400 cursor-not-allowed'
+                                      : item.highlight
+                                      ? 'text-blue-600 hover:bg-blue-50'
+                                      : 'text-gray-700 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <Icon className="w-4 h-4 flex-shrink-0" />
+                                  <span className="flex-1 truncate">{item.label}</span>
+                                  {isLocked && <Lock className="w-3 h-3" />}
+                                  {item.badge && (
+                                    <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${
+                                      item.badge === 'NEW' ? 'bg-green-100 text-green-700' :
+                                      item.badge === 'PRO' ? 'bg-purple-100 text-purple-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {item.badge}
+                                    </span>
+                                  )}
+                                </Link>
+                              </motion.div>
                             );
                           })}
                         </motion.div>

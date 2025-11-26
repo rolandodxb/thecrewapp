@@ -8,7 +8,6 @@ import { getUserEnrollments } from '../services/courseService';
 import { getUserPoints } from '../services/rewardsService';
 import EmptyState from '../components/EmptyState';
 import { useState, useEffect } from 'react';
-import ModernDashboardLayout from '../components/layout/ModernDashboardLayout';
 
 export default function Dashboard() {
   const { currentUser } = useApp();
@@ -145,17 +144,19 @@ export default function Dashboard() {
 
   if (currentUser.role === 'student') {
     return (
-      <ModernDashboardLayout title={`Welcome back, ${currentUser.name.split(' ')[0]}!`}>
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={containerVariants}
-        >
-          <motion.div variants={itemVariants} className="mb-6">
-            <p className="text-base text-gray-600">
-              Continue your journey to cabin crew excellence
-            </p>
-          </motion.div>
+      <motion.div
+        initial="hidden"
+        animate="visible"
+        variants={containerVariants}
+      >
+        <motion.div variants={itemVariants} className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Welcome back, {currentUser.name.split(' ')[0]}!
+          </h1>
+          <p className="text-base text-gray-600">
+            Continue your journey to cabin crew excellence
+          </p>
+        </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           <motion.div
@@ -203,24 +204,25 @@ export default function Dashboard() {
             />
           </motion.div>
         )}
-        </motion.div>
-      </ModernDashboardLayout>
+      </motion.div>
     );
   }
 
   if (currentUser.role === 'mentor') {
     return (
-      <ModernDashboardLayout title="Mentor Dashboard">
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={containerVariants}
-        >
-          <motion.div variants={itemVariants} className="mb-6">
-            <p className="text-base text-gray-600">
-              Manage your students and educational content
-            </p>
-          </motion.div>
+      <motion.div
+        initial="hidden"
+        animate="visible"
+        variants={containerVariants}
+      >
+        <motion.div variants={itemVariants} className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Mentor Dashboard
+          </h1>
+          <p className="text-base text-gray-600">
+            Manage your students and educational content
+          </p>
+        </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           <motion.div
@@ -266,24 +268,25 @@ export default function Dashboard() {
               }}
             />
           </motion.div>
-        </motion.div>
-      </ModernDashboardLayout>
+      </motion.div>
     );
   }
 
   if (currentUser.role === 'governor') {
     return (
-      <ModernDashboardLayout title="Governor Dashboard">
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={containerVariants}
-        >
-          <motion.div variants={itemVariants} className="mb-6">
-            <p className="text-base text-gray-600">
-              System overview and management
-            </p>
-          </motion.div>
+      <motion.div
+        initial="hidden"
+        animate="visible"
+        variants={containerVariants}
+      >
+        <motion.div variants={itemVariants} className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Governor Dashboard
+          </h1>
+          <p className="text-base text-gray-600">
+            System overview and management
+          </p>
+        </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
           <motion.div
@@ -338,8 +341,7 @@ export default function Dashboard() {
             }}
           />
         </motion.div>
-        </motion.div>
-      </ModernDashboardLayout>
+      </motion.div>
     );
   }
 

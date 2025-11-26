@@ -79,7 +79,7 @@ export default function CommunityPage() {
   };
 
   const filteredConversations = conversations.filter(conv =>
-    conv.name.toLowerCase().includes(searchTerm.toLowerCase())
+    conv?.title?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (!currentUser) {
@@ -155,12 +155,12 @@ export default function CommunityPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                      {conv.name.charAt(0)}
+                      {conv.title?.charAt(0) || 'C'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 text-sm truncate">{conv.name}</h3>
+                      <h3 className="font-semibold text-gray-900 text-sm truncate">{conv.title}</h3>
                       <p className="text-xs text-gray-500 truncate">
-                        {conv.participants?.length || 0} members
+                        {conv.members?.length || 0} members
                       </p>
                     </div>
                   </div>
@@ -243,9 +243,9 @@ export default function CommunityPage() {
                                   {message.senderName}
                                 </p>
                               )}
-                              <p className="text-sm leading-relaxed">{message.text}</p>
+                              <p className="text-sm leading-relaxed">{message.content}</p>
                               <p className={`text-xs mt-1 ${isOwn ? 'text-white/70' : 'text-gray-500'}`}>
-                                {message.timestamp?.toDate?.()?.toLocaleTimeString([], {
+                                {message.createdAt?.toDate?.()?.toLocaleTimeString([], {
                                   hour: '2-digit',
                                   minute: '2-digit'
                                 })}

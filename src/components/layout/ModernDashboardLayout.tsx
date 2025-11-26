@@ -1,11 +1,12 @@
-import { ReactNode } from 'react';
-import { Search, Mic, Bell, User, LogOut, MoreVertical } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ReactNode, useState } from 'react';
+import { Search, Mic, Bell, User, LogOut, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 import ModernSidebar from './ModernSidebar';
+import GlobalSearchBar from '../GlobalSearchBar';
 
 interface ModernDashboardLayoutProps {
   children: ReactNode;
@@ -15,6 +16,7 @@ interface ModernDashboardLayoutProps {
 export default function ModernDashboardLayout({ children, title }: ModernDashboardLayoutProps) {
   const { currentUser } = useApp();
   const navigate = useNavigate();
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -50,18 +52,18 @@ export default function ModernDashboardLayout({ children, title }: ModernDashboa
           animate={{ y: 0, opacity: 1 }}
           className="fixed top-2 sm:top-3 md:top-4 right-2 sm:right-3 md:right-4 z-40 flex items-center gap-1.5 sm:gap-2 md:gap-3"
         >
-          {/* Search Bar - Hidden on small screens to prevent overlap */}
-          <div className="relative hidden lg:block">
-            <Search className="absolute left-3 lg:left-4 top-1/2 -translate-y-1/2 w-3 h-3 lg:w-4 lg:h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search"
-              className="w-40 lg:w-56 xl:w-64 pl-9 lg:pl-11 pr-9 lg:pr-11 py-2 lg:py-2.5 bg-white/90 backdrop-blur-xl rounded-full text-xs lg:text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400 shadow-lg transition"
-            />
-            <Mic className="absolute right-3 lg:right-4 top-1/2 -translate-y-1/2 w-3 h-3 lg:w-4 lg:h-4 text-gray-400" />
-          </div>
+          {/* Search Button for Mobile - Shows modal */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowMobileSearch(true)}
+            className="lg:hidden p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+            title="Search"
+          >
+            <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
+          </motion.button>
 
-          {/* Notifications Button - Magenta/Pink */}
+          {/* Notifications Button - Pink */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -94,6 +96,47 @@ export default function ModernDashboardLayout({ children, title }: ModernDashboa
             <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
           </motion.button>
         </motion.div>
+
+        {/* Desktop Search Bar - Top Center */}
+        <motion.div
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="hidden lg:block fixed top-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-2xl px-4"
+        >
+          <GlobalSearchBar />
+        </motion.div>
+
+        {/* Mobile Search Modal */}
+        <AnimatePresence>
+          {showMobileSearch && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 lg:hidden"
+              onClick={() => setShowMobileSearch(false)}
+            >
+              <motion.div
+                initial={{ y: -100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -100, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="absolute top-0 left-0 right-0 bg-white p-4 shadow-2xl"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setShowMobileSearch(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full transition"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  <h3 className="text-lg font-semibold">Search</h3>
+                </div>
+                <GlobalSearchBar />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Main Content Area - Responsive */}
         <div className="pt-16 sm:pt-20 md:pt-24 px-2 sm:px-3 md:px-4 lg:px-6 pb-4 sm:pb-6 md:pb-8">

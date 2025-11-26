@@ -216,7 +216,7 @@ export default function CommunityFeedPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
               >
-                <PostCard post={post} onUpdate={() => loadPosts(true)} />
+                <PostCard post={post} currentUser={currentUser} onDeleted={() => loadPosts(true)} />
               </motion.div>
             ))}
           </div>

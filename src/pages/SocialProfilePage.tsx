@@ -3,9 +3,11 @@ import { useApp } from '../context/AppContext';
 import { communityFeedService, CommunityPost } from '../services/communityFeedService';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Award, BookOpen, Trophy, Grid3x3, Lock, ArrowLeft } from 'lucide-react';
+import { Award, BookOpen, Trophy, Grid3x3, Lock, ArrowLeft, UserPlus, UserMinus, UserCheck, MessageCircle, Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { sendFriendRequest, areFriends, unfriend, followUser, unfollowUser, isFollowing, getFollowerCounts } from '../services/friendsService';
+import FloatingMessenger from '../components/FloatingMessenger';
 
 interface UserStats {
   totalPoints: number;
@@ -40,6 +42,10 @@ export default function SocialProfilePage() {
     modulesCompleted: 0
   });
   const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
+  const [isFriend, setIsFriend] = useState(false);
+  const [isFollowingUser, setIsFollowingUser] = useState(false);
+  const [followerCount, setFollowerCount] = useState({ followers: 0, following: 0 });
+  const [showMessenger, setShowMessenger] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -152,8 +158,74 @@ export default function SocialProfilePage() {
     loadUserProfile();
   }, [currentUser, viewingUserId]);
 
+  useEffect(() => {
+    const loadSocialStatus = async () => {
+      if (!currentUser || !profileUser || isOwnProfile) return;
+
+      const [friendStatus, followingStatus, counts] = await Promise.all([
+        areFriends(currentUser.uid, profileUser.uid),
+        isFollowing(currentUser.uid, profileUser.uid),
+        getFollowerCounts(profileUser.uid)
+      ]);
+
+      setIsFriend(friendStatus);
+      setIsFollowingUser(followingStatus);
+      setFollowerCount(counts);
+    };
+
+    loadSocialStatus();
+  }, [currentUser, profileUser, isOwnProfile]);
+
   const handlePostClick = (post: CommunityPost) => {
     navigate('/community-feed', { state: { postId: post.id } });
+  };
+
+  const handleAddFriend = async () => {
+    if (!currentUser || !profileUser) return;
+    try {
+      await sendFriendRequest(
+        currentUser.uid,
+        currentUser.name,
+        currentUser.photoURL,
+        profileUser.uid,
+        profileUser.name
+      );
+      alert('Friend request sent!');
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+      alert('Failed to send friend request');
+    }
+  };
+
+  const handleUnfriend = async () => {
+    if (!currentUser || !profileUser) return;
+    if (confirm('Remove this friend?')) {
+      try {
+        await unfriend(currentUser.uid, profileUser.uid);
+        setIsFriend(false);
+        alert('Friend removed');
+      } catch (error) {
+        console.error('Error removing friend:', error);
+        alert('Failed to remove friend');
+      }
+    }
+  };
+
+  const handleFollow = async () => {
+    if (!currentUser || !profileUser) return;
+    try {
+      if (isFollowingUser) {
+        await unfollowUser(currentUser.uid, profileUser.uid);
+        setIsFollowingUser(false);
+        setFollowerCount(prev => ({ ...prev, followers: prev.followers - 1 }));
+      } else {
+        await followUser(currentUser.uid, currentUser.name, currentUser.photoURL, profileUser.uid);
+        setIsFollowingUser(true);
+        setFollowerCount(prev => ({ ...prev, followers: prev.followers + 1 }));
+      }
+    } catch (error) {
+      console.error('Error following/unfollowing:', error);
+    }
   };
 
   const isOwnProfile = !viewingUserId || viewingUserId === currentUser?.uid;
@@ -225,11 +297,77 @@ export default function SocialProfilePage() {
               )}
             </div>
 
-            <p className="text-center text-gray-700 max-w-2xl mb-6 text-sm md:text-base leading-relaxed">
+            <p className="text-center text-gray-700 max-w-2xl mb-4 text-sm md:text-base leading-relaxed">
               {profileUser.bio}
             </p>
+
+            {!isOwnProfile && (
+              <div className="flex flex-wrap items-center justify-center gap-3 mb-4">
+                <button
+                  onClick={() => setShowMessenger(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-[#D71920] to-[#B91518] text-white rounded-xl font-bold hover:shadow-lg transition flex items-center gap-2"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  Message
+                </button>
+
+                {isFriend ? (
+                  <button
+                    onClick={handleUnfriend}
+                    className="px-6 py-3 bg-green-100 text-green-700 rounded-xl font-bold hover:bg-green-200 transition flex items-center gap-2"
+                  >
+                    <UserCheck className="w-5 h-5" />
+                    Friends
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleAddFriend}
+                    className="px-6 py-3 bg-blue-100 text-blue-700 rounded-xl font-bold hover:bg-blue-200 transition flex items-center gap-2"
+                  >
+                    <UserPlus className="w-5 h-5" />
+                    Add Friend
+                  </button>
+                )}
+
+                <button
+                  onClick={handleFollow}
+                  className={`px-6 py-3 rounded-xl font-bold transition flex items-center gap-2 ${
+                    isFollowingUser
+                      ? 'bg-pink-100 text-pink-700 hover:bg-pink-200'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <Heart className={`w-5 h-5 ${isFollowingUser ? 'fill-current' : ''}`} />
+                  {isFollowingUser ? 'Following' : 'Follow'}
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center justify-center gap-6 text-sm">
+              <div className="text-center">
+                <div className="font-bold text-gray-900">{followerCount.followers}</div>
+                <div className="text-gray-600">Followers</div>
+              </div>
+              <div className="text-center">
+                <div className="font-bold text-gray-900">{followerCount.following}</div>
+                <div className="text-gray-600">Following</div>
+              </div>
+              <div className="text-center">
+                <div className="font-bold text-gray-900">{posts.length}</div>
+                <div className="text-gray-600">Posts</div>
+              </div>
+            </div>
           </div>
         </div>
+
+        {showMessenger && profileUser && (
+          <FloatingMessenger
+            recipientId={profileUser.uid}
+            recipientName={profileUser.name}
+            recipientAvatar={profileUser.photoURL}
+            onClose={() => setShowMessenger(false)}
+          />
+        )}
 
         <div className="liquid-crystal-panel p-4 md:p-6 mb-4 md:mb-6">
           <div className="flex items-center gap-2 mb-4">

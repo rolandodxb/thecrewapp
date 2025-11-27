@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Users, MessageCircle, Search, Plus, X, Hash } from 'lucide-react';
 import { communityChatService, Conversation } from '../../services/communityChatService';
 import { getAllUsers, User } from '../../services/chatService';
-import { auth, supabase } from '../../lib/auth';
+import { auth } from '../../lib/firebase';
+
 interface ConversationListProps {
   onSelectConversation: (conversationId: string) => void;
   selectedConversationId?: string;
   onClose?: () => void;
 }
+
 export default function ConversationList({
   onSelectConversation,
   selectedConversationId,
@@ -22,22 +24,28 @@ export default function ConversationList({
   const [conversationType, setConversationType] = useState<'private' | 'group'>('private');
   const [groupTitle, setGroupTitle] = useState('');
   const [creating, setCreating] = useState(false);
+
   useEffect(() => {
     const initCommunityChat = async () => {
       await communityChatService.ensureCommunityChat();
     };
+
     initCommunityChat();
+
     const unsubscribe = communityChatService.subscribeToConversations((convs) => {
       setConversations(convs);
       setLoading(false);
     });
+
     return () => unsubscribe();
   }, []);
+
   useEffect(() => {
     if (showNewConversation) {
       loadUsers();
     }
   }, [showNewConversation]);
+
   const loadUsers = async () => {
     try {
       const users = await getAllUsers();
@@ -48,27 +56,33 @@ export default function ConversationList({
       console.error('Error loading users:', error);
     }
   };
+
   const handleCreateConversation = async () => {
     if (selectedUsers.length === 0) {
       alert('Please select at least one user');
       return;
     }
+
     if (conversationType === 'group' && !groupTitle.trim()) {
       alert('Please enter a group name');
       return;
     }
+
     setCreating(true);
     try {
       const currentUserId = auth.currentUser?.uid;
       if (!currentUserId) throw new Error('Not authenticated');
+
       const title = conversationType === 'private'
         ? availableUsers.find(u => u.uid === selectedUsers[0])?.name || 'Conversation'
         : groupTitle;
+
       const conversationId = await communityChatService.createConversation(
         conversationType,
         title,
         selectedUsers
       );
+
       setShowNewConversation(false);
       setSelectedUsers([]);
       setGroupTitle('');
@@ -80,6 +94,7 @@ export default function ConversationList({
       setCreating(false);
     }
   };
+
   const toggleUserSelection = (userId: string) => {
     if (conversationType === 'private') {
       setSelectedUsers([userId]);
@@ -91,6 +106,7 @@ export default function ConversationList({
       );
     }
   };
+
   const getCountryFlag = (country?: string) => {
     const flags: Record<string, string> = {
       'United Arab Emirates': '🇦🇪',
@@ -104,6 +120,7 @@ export default function ConversationList({
     };
     return flags[country || ''] || '🌍';
   };
+
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case 'mentor':
@@ -114,11 +131,14 @@ export default function ConversationList({
         return 'glass-bubble text-gray-700';
     }
   };
+
   const filteredConversations = conversations.filter((conv) =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
   const groupChats = filteredConversations.filter(c => c.type === 'group' || c.id === 'publicRoom');
   const privateChats = filteredConversations.filter(c => c.type === 'private');
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -126,6 +146,7 @@ export default function ConversationList({
       </div>
     );
   }
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-gray-200 glass-light flex-shrink-0">
@@ -150,6 +171,7 @@ export default function ConversationList({
           />
         </div>
       </div>
+
       <div className="flex-1 overflow-y-auto glass-light">
         {groupChats.length > 0 && (
           <div className="mb-1">
@@ -182,6 +204,7 @@ export default function ConversationList({
                       <Users className="w-5 h-5" />
                     )}
                   </div>
+
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
                       <h3 className="font-bold text-gray-900 truncate text-sm">
@@ -196,6 +219,7 @@ export default function ConversationList({
                         </span>
                       )}
                     </div>
+
                     {conversation.lastMessage ? (
                       <p className="text-xs text-gray-500 truncate">
                         {conversation.lastMessage.text}
@@ -205,6 +229,7 @@ export default function ConversationList({
                         No messages yet
                       </p>
                     )}
+
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-gray-400">
                         {conversation.members.length} members
@@ -216,6 +241,7 @@ export default function ConversationList({
             </div>
           </div>
         )}
+
         {privateChats.length > 0 && (
           <div>
             <div className="px-4 py-2 glass-light border-b border-gray-100">
@@ -249,6 +275,7 @@ export default function ConversationList({
                       </div>
                     )}
                   </div>
+
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
                       <h3 className="font-bold text-gray-900 truncate text-sm">
@@ -263,6 +290,7 @@ export default function ConversationList({
                         </span>
                       )}
                     </div>
+
                     {conversation.lastMessage ? (
                       <p className="text-xs text-gray-500 truncate">
                         {conversation.lastMessage.text}
@@ -278,6 +306,7 @@ export default function ConversationList({
             </div>
           </div>
         )}
+
         {filteredConversations.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 p-8">
             <MessageCircle className="w-16 h-16 mb-4 text-gray-300" />
@@ -286,6 +315,7 @@ export default function ConversationList({
           </div>
         )}
       </div>
+
       {showNewConversation && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="glass-light rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -303,6 +333,7 @@ export default function ConversationList({
                   <X className="w-6 h-6" />
                 </button>
               </div>
+
               <div className="flex gap-4 mb-4">
                 <button
                   onClick={() => {
@@ -331,6 +362,7 @@ export default function ConversationList({
                   Group Chat
                 </button>
               </div>
+
               {conversationType === 'group' && (
                 <input
                   type="text"
@@ -340,12 +372,14 @@ export default function ConversationList({
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#D71921] focus:border-transparent"
                 />
               )}
+
               <p className="text-sm text-gray-600 mt-2">
                 {conversationType === 'private'
                   ? 'Select one user to start a private conversation'
                   : `Select users to add to the group (${selectedUsers.length} selected)`}
               </p>
             </div>
+
             <div className="flex-1 overflow-y-auto p-6">
               {availableUsers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-400">
@@ -412,6 +446,7 @@ export default function ConversationList({
                 </div>
               )}
             </div>
+
             <div className="p-6 border-t border-gray-200">
               <div className="flex gap-3">
                 <button

@@ -3,27 +3,31 @@ import { useApp } from '../context/AppContext';
 import { useSearchParams } from 'react-router-dom';
 import { communityChatService, Conversation } from '../services/communityChatService';
 import { presenceService } from '../services/presenceService';
-import { auth, supabase } from '../lib/auth';
+import { auth } from '../lib/firebase';
 import { checkFeatureAccess } from '../utils/featureAccess';
 import FeatureLock from '../components/FeatureLock';
 import ChatSidebar from '../components/chat/ChatSidebar';
 import ChatWindow from '../components/chat/ChatWindow';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useTypingIndicator } from '../hooks/useTypingIndicator';
+
 export default function ChatPage() {
   const { currentUser } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [sending, setSending] = useState(false);
+
   const { messages, loading, hasMore, loadMoreMessages } = useChatMessages(
     selectedConversation?.id || null
   );
+
   const { typingUsers, startTyping, stopTyping } = useTypingIndicator(
     selectedConversation?.id || null,
     currentUser?.uid || '',
     currentUser?.name || ''
   );
+
   useEffect(() => {
     const chatId = searchParams.get('chat');
     if (chatId && conversations.length > 0) {
@@ -34,6 +38,7 @@ export default function ChatPage() {
       }
     }
   }, [searchParams, conversations, setSearchParams]);
+
   useEffect(() => {
     const initCommunityChat = async () => {
       try {
@@ -46,18 +51,23 @@ export default function ChatPage() {
         console.error('Error initializing community chat:', error);
       }
     };
+
     initCommunityChat();
     presenceService.initializePresence();
+
     const unsubscribeConversations = communityChatService.subscribeToConversations((convs) => {
       setConversations(convs);
     });
+
     return () => {
       presenceService.cleanup();
       unsubscribeConversations();
     };
   }, []);
+
   const handleSendMessage = async (message: string, file?: File) => {
     if (!currentUser || !selectedConversation || !message.trim()) return;
+
     setSending(true);
     try {
       await communityChatService.sendMessage(
@@ -74,10 +84,13 @@ export default function ChatPage() {
       setSending(false);
     }
   };
+
   const handleSelectConversation = (conversation: Conversation) => {
     setSelectedConversation(conversation);
   };
+
   if (!currentUser) return null;
+
   const chatAccess = checkFeatureAccess(currentUser, 'chat');
   if (!chatAccess.allowed) {
     return (
@@ -88,6 +101,7 @@ export default function ChatPage() {
       />
     );
   }
+
   return (
     <div className="h-screen bg-white">
       {!selectedConversation ? (

@@ -1,5 +1,8 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, Unsubscribe } from 'firebase/firestore';
+
 export type FeatureSeverity = 'info' | 'low' | 'urgent' | 'critical';
+
 export interface FeatureRestriction {
   enabled: boolean;
   severity?: FeatureSeverity;
@@ -8,6 +11,7 @@ export interface FeatureRestriction {
   availableAt?: string;
   estimatedDuration?: string;
 }
+
 export interface SystemFeatures {
   chat: FeatureRestriction;
   quiz: FeatureRestriction;
@@ -23,42 +27,44 @@ export interface SystemFeatures {
   leaderboard: FeatureRestriction;
   community: FeatureRestriction;
 }
+
 export interface SystemAnnouncement {
   active: boolean;
   message: string;
   type: 'info' | 'warning' | 'error' | 'success';
   timestamp: string | null;
 }
+
 export interface SystemControl {
   features: SystemFeatures;
   announcement: SystemAnnouncement;
   updatedBy?: string;
   updatedAt?: any;
 }
+
 const SYSTEM_CONTROL_DOC_ID = 'status';
+
 export const getSystemControl = async (): Promise<SystemControl | null> => {
   try {
-    const { data, error } = await supabase
-      .from('system_control')
-      .select('*')
-      .eq('id', SYSTEM_CONTROL_DOC_ID)
-      .maybeSingle();
+    const docRef = doc(db, 'systemControl', SYSTEM_CONTROL_DOC_ID);
+    const docSnap = await getDoc(docRef);
 
-    if (error) throw error;
-
-    if (!data) {
+    if (!docSnap.exists()) {
       console.log('No system control entry found, creating default...');
       return await createDefaultSystemControl();
     }
-    return data as SystemControl;
+
+    return docSnap.data() as SystemControl;
   } catch (error) {
     console.error('Error fetching system control:', error);
     return null;
   }
 };
+
 const createDefaultSystemControl = async (): Promise<SystemControl | null> => {
   try {
     const defaultFeature: FeatureRestriction = { enabled: true };
+
     const defaultControl: SystemControl = {
       features: {
         chat: defaultFeature,
@@ -82,48 +88,41 @@ const createDefaultSystemControl = async (): Promise<SystemControl | null> => {
         timestamp: null,
       },
       updatedBy: 'system',
-      updatedAt: new Date().toISOString(),
+      updatedAt: serverTimestamp(),
     };
 
-    const { data, error } = await supabase
-      .from('system_control')
-      .insert({ id: SYSTEM_CONTROL_DOC_ID, ...defaultControl })
-      .select()
-      .single();
-
-    if (error) throw error;
+    const docRef = doc(db, 'systemControl', SYSTEM_CONTROL_DOC_ID);
+    await setDoc(docRef, defaultControl);
     console.log('Default system control created successfully');
-    return data as SystemControl;
+    return defaultControl;
   } catch (error) {
     console.error('Error creating default system control:', error);
     return null;
   }
 };
+
 export const updateSystemControl = async (
   updates: Partial<SystemControl>,
   userId: string
 ): Promise<SystemControl | null> => {
   try {
+    const docRef = doc(db, 'systemControl', SYSTEM_CONTROL_DOC_ID);
     const updateData = {
       ...updates,
       updatedBy: userId,
-      updated_at: new Date().toISOString(),
+      updatedAt: serverTimestamp(),
     };
 
-    const { data, error } = await supabase
-      .from('system_control')
-      .update(updateData)
-      .eq('id', SYSTEM_CONTROL_DOC_ID)
-      .select()
-      .single();
+    await updateDoc(docRef, updateData);
 
-    if (error) throw error;
-    return data as SystemControl;
+    const docSnap = await getDoc(docRef);
+    return docSnap.data() as SystemControl;
   } catch (error) {
     console.error('Error updating system control:', error);
     throw error;
   }
 };
+
 export const updateAnnouncement = async (
   announcement: Partial<SystemAnnouncement>,
   userId: string
@@ -131,45 +130,42 @@ export const updateAnnouncement = async (
   try {
     const systemControl = await getSystemControl();
     if (!systemControl) throw new Error('System control not found');
+
     const updatedAnnouncement = {
       ...systemControl.announcement,
       ...announcement,
     };
+
     await updateSystemControl({ announcement: updatedAnnouncement }, userId);
   } catch (error) {
     console.error('Error updating announcement:', error);
     throw error;
   }
 };
+
 export const subscribeToSystemControl = (
   callback: (control: SystemControl | null) => void
-): (() => void) => {
-  const channel = supabase
-    .channel('system-control')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'system_control',
-        filter: `id=eq.${SYSTEM_CONTROL_DOC_ID}`,
-      },
-      (payload) => {
-        if (payload.new) {
-          callback(payload.new as SystemControl);
-        } else {
-          callback(null);
-        }
+): Unsubscribe => {
+  const docRef = doc(db, 'systemControl', SYSTEM_CONTROL_DOC_ID);
+
+  const unsubscribe = onSnapshot(
+    docRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        callback(docSnap.data() as SystemControl);
+      } else {
+        callback(null);
       }
-    )
-    .subscribe();
+    },
+    (error) => {
+      console.error('Error subscribing to system control:', error);
+      callback(null);
+    }
+  );
 
-  getSystemControl().then(callback);
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return unsubscribe;
 };
+
 export const updateFeatureStatus = async (
   featureName: keyof SystemFeatures,
   restriction: FeatureRestriction,
@@ -178,10 +174,12 @@ export const updateFeatureStatus = async (
   try {
     const systemControl = await getSystemControl();
     if (!systemControl) throw new Error('System control not found');
+
     const updatedFeatures = {
       ...systemControl.features,
       [featureName]: restriction,
     };
+
     await updateSystemControl({ features: updatedFeatures }, userId);
     console.log(`Feature ${featureName} updated:`, restriction);
   } catch (error) {
@@ -189,11 +187,13 @@ export const updateFeatureStatus = async (
     throw error;
   }
 };
+
 export const isFeatureEnabled = (features: SystemFeatures, featureName: keyof SystemFeatures): boolean => {
   const feature = features[featureName];
   if (!feature) return true;
   return feature.enabled;
 };
+
 export const getFeatureRestriction = (features: SystemFeatures, featureName: keyof SystemFeatures): FeatureRestriction | null => {
   const feature = features[featureName];
   if (!feature || feature.enabled) return null;

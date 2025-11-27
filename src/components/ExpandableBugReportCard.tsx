@@ -2,16 +2,20 @@ import { useState } from 'react';
 import { ChevronDown, ChevronUp, Clock, User, MessageCircle, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BugReport, BugResponse, addResponseToBugReport } from '../services/bugReportService';
+import { Timestamp } from 'firebase/firestore';
 import { useApp } from '../context/AppContext';
+
 interface ExpandableBugReportCardProps {
   report: BugReport;
   onUpdate?: () => void;
 }
+
 export default function ExpandableBugReportCard({ report, onUpdate }: ExpandableBugReportCardProps) {
   const { currentUser } = useApp();
   const [isExpanded, setIsExpanded] = useState(false);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open':
@@ -28,6 +32,7 @@ export default function ExpandableBugReportCard({ report, onUpdate }: Expandable
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'critical':
@@ -42,9 +47,11 @@ export default function ExpandableBugReportCard({ report, onUpdate }: Expandable
         return 'bg-gray-100 text-gray-800';
     }
   };
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !comment.trim() || !report.id) return;
+
     setSubmitting(true);
     try {
       const response: BugResponse = {
@@ -55,6 +62,7 @@ export default function ExpandableBugReportCard({ report, onUpdate }: Expandable
         message: comment,
         createdAt: Timestamp.now(),
       };
+
       await addResponseToBugReport(report.id, response);
       setComment('');
       if (onUpdate) onUpdate();
@@ -65,6 +73,7 @@ export default function ExpandableBugReportCard({ report, onUpdate }: Expandable
       setSubmitting(false);
     }
   };
+
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
     try {
@@ -74,8 +83,10 @@ export default function ExpandableBugReportCard({ report, onUpdate }: Expandable
       return 'N/A';
     }
   };
+
   const responses = report.responses || [];
   const hasComments = responses.length > 0;
+
   return (
     <div className="glass-card rounded-2xl shadow-lg border-2 border-transparent hover:border-[#D71920]/20 transition">
       <div
@@ -107,7 +118,9 @@ export default function ExpandableBugReportCard({ report, onUpdate }: Expandable
             {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-600" /> : <ChevronDown className="w-5 h-5 text-gray-600" />}
           </button>
         </div>
+
         <p className="text-gray-700 text-sm line-clamp-2">{report.description}</p>
+
         <div className="mt-4 flex items-center gap-4 text-xs text-gray-500">
           <div className="flex items-center gap-1">
             <User className="w-3 h-3" />
@@ -119,6 +132,7 @@ export default function ExpandableBugReportCard({ report, onUpdate }: Expandable
           </div>
         </div>
       </div>
+
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -134,12 +148,14 @@ export default function ExpandableBugReportCard({ report, onUpdate }: Expandable
                   <h4 className="font-bold text-gray-900 mb-2">Description</h4>
                   <p className="text-gray-700 text-sm whitespace-pre-wrap">{report.description}</p>
                 </div>
+
                 {report.assignedToName && (
                   <div>
                     <h4 className="font-bold text-gray-900 mb-2">Assigned To</h4>
                     <p className="text-gray-700 text-sm">{report.assignedToName}</p>
                   </div>
                 )}
+
                 <div>
                   <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <MessageCircle className="w-4 h-4" />
@@ -169,6 +185,7 @@ export default function ExpandableBugReportCard({ report, onUpdate }: Expandable
                     </div>
                   )}
                 </div>
+
                 {currentUser && (currentUser.role === 'mentor' || currentUser.role === 'governor') && (
                   <form onSubmit={handleAddComment} className="mt-6">
                     <h4 className="font-bold text-gray-900 mb-3">Add Comment</h4>

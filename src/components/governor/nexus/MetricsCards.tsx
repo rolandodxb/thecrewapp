@@ -1,72 +1,52 @@
 import { Users, MessageCircle, Activity, Brain } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useFirestoreCollection } from '../../../hooks/useFirestoreRealtime';
+import { where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../../lib/firebase';
+
 interface SystemStatus {
   chatEnabled?: boolean;
   quizEnabled?: boolean;
   aiEnabled?: boolean;
   downloadsEnabled?: boolean;
 }
+
 export default function MetricsCards() {
-  const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [conversations, setConversations] = useState<any[]>([]);
+  const { data: allUsers } = useFirestoreCollection('users');
+  const { data: conversations } = useFirestoreCollection('conversations');
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchSystemStatus = async () => {
       try {
-        const [usersRes, convsRes, statusRes] = await Promise.all([
-          supabase.from('users').select('*'),
-          supabase.from('conversations').select('*'),
-          supabase.from('system_control').select('*').eq('id', 'status').maybeSingle()
-        ]);
-
-        if (usersRes.data) setAllUsers(usersRes.data);
-        if (convsRes.data) setConversations(convsRes.data);
-        if (statusRes.data) setSystemStatus(statusRes.data as SystemStatus);
+        const statusDoc = await getDoc(doc(db, 'systemControl', 'status'));
+        if (statusDoc.exists()) {
+          setSystemStatus(statusDoc.data() as SystemStatus);
+        }
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching system status:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
-
-    const usersChannel = supabase
-      .channel('metrics-users')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
-        supabase.from('users').select('*').then(res => {
-          if (res.data) setAllUsers(res.data);
-        });
-      })
-      .subscribe();
-
-    const convsChannel = supabase
-      .channel('metrics-conversations')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
-        supabase.from('conversations').select('*').then(res => {
-          if (res.data) setConversations(res.data);
-        });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(usersChannel);
-      supabase.removeChannel(convsChannel);
-    };
+    fetchSystemStatus();
   }, []);
+
   const activeUsers = allUsers.filter((user: any) => user.status === 'online').length;
   const totalUsers = allUsers.length;
   const activeConversations = conversations.length;
+
   const systemHealth = loading ? 100 : (
     (systemStatus.chatEnabled ? 25 : 0) +
     (systemStatus.quizEnabled ? 25 : 0) +
     (systemStatus.aiEnabled ? 25 : 0) +
     (systemStatus.downloadsEnabled ? 25 : 0)
   );
+
   const metrics = [
     {
       label: 'Active Users',
@@ -97,6 +77,7 @@ export default function MetricsCards() {
       change: systemStatus.aiEnabled ? 'Active' : 'Disabled',
     },
   ];
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {metrics.map((metric, index) => {

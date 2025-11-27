@@ -1,7 +1,21 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  Timestamp,
+  increment
+} from 'firebase/firestore';
 import { walletService } from './walletService';
 import { activityAttendanceService } from './activityAttendanceService';
 import QRCode from 'qrcode';
+
 export interface EventOrder {
   id: string;
   order_number: string;
@@ -41,6 +55,7 @@ export interface EventOrder {
     [key: string]: any;
   };
 }
+
 export interface CreateEventOrderData {
   buyer_id: string;
   buyer_name: string;
@@ -61,17 +76,20 @@ export interface CreateEventOrderData {
   wallet_amount_used?: number;
   stripe_amount?: number;
 }
+
 const generateOrderNumber = (): string => {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();
   return `EVT-${timestamp}-${random}`;
 };
+
 export const eventOrderService = {
   async createEventOrder(orderData: CreateEventOrderData): Promise<EventOrder> {
     try {
       const orderRef = doc(collection(db, 'event_orders'));
       const orderNumber = generateOrderNumber();
       const qrCodeData = `event-check-in:${orderRef.id}`;
+
       const qrCode = await QRCode.toDataURL(qrCodeData, {
         width: 300,
         margin: 2,
@@ -80,6 +98,7 @@ export const eventOrderService = {
           light: '#FFFFFF'
         }
       });
+
       const order: EventOrder = {
         id: orderRef.id,
         order_number: orderNumber,
@@ -109,6 +128,7 @@ export const eventOrderService = {
         created_at: Timestamp.now(),
         metadata: {}
       };
+
       await setDoc(orderRef, order);
       console.log('Event order created:', orderRef.id, orderNumber);
       return order;
@@ -117,6 +137,7 @@ export const eventOrderService = {
       throw error;
     }
   },
+
   async completePayment(
     orderId: string,
     paymentDetails: {
@@ -127,10 +148,13 @@ export const eventOrderService = {
     try {
       const orderRef = doc(db, 'event_orders', orderId);
       const orderSnapshot = await getDoc(orderRef);
+
       if (!orderSnapshot.exists()) {
         throw new Error('Order not found');
       }
+
       const order = orderSnapshot.data() as EventOrder;
+
       if (order.wallet_amount_used && order.wallet_amount_used > 0) {
         await walletService.debitWallet(
           order.buyer_id,
@@ -144,44 +168,55 @@ export const eventOrderService = {
           }
         );
       }
+
       await updateDoc(orderRef, {
         payment_status: 'completed',
         completed_at: Timestamp.now(),
         payment_intent_id: paymentDetails.payment_intent_id,
         stripe_charge_id: paymentDetails.stripe_charge_id
       });
+
       await this.incrementEventParticipants(order.product_id, order.quantity);
+
       console.log('Event order payment completed:', orderId);
     } catch (error) {
       console.error('Error completing payment:', error);
       throw error;
     }
   },
+
   async checkInAttendee(orderId: string, scannedBy?: string): Promise<{ success: boolean; message: string }> {
     try {
       const orderRef = doc(db, 'event_orders', orderId);
       const orderSnapshot = await getDoc(orderRef);
+
       if (!orderSnapshot.exists()) {
         return { success: false, message: 'Order not found' };
       }
+
       const order = orderSnapshot.data() as EventOrder;
+
       if (order.payment_status !== 'completed') {
         return { success: false, message: 'Payment not completed' };
       }
+
       if (order.check_in_status === 'checked_in') {
         return { success: false, message: 'Already checked in' };
       }
+
       await updateDoc(orderRef, {
         check_in_status: 'checked_in',
         checked_in_at: Timestamp.now(),
         'metadata.scanned_by': scannedBy || 'self'
       });
+
       return { success: true, message: 'Successfully checked in!' };
     } catch (error) {
       console.error('Error checking in attendee:', error);
       return { success: false, message: 'Check-in failed: ' + (error as Error).message };
     }
   },
+
   async getUserEventOrders(userId: string): Promise<EventOrder[]> {
     try {
       const q = query(
@@ -189,6 +224,7 @@ export const eventOrderService = {
         where('buyer_id', '==', userId),
         orderBy('created_at', 'desc')
       );
+
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventOrder));
     } catch (error) {
@@ -196,6 +232,7 @@ export const eventOrderService = {
       return [];
     }
   },
+
   async getEventAttendees(productId: string): Promise<EventOrder[]> {
     try {
       const q = query(
@@ -204,6 +241,7 @@ export const eventOrderService = {
         where('payment_status', '==', 'completed'),
         orderBy('created_at', 'desc')
       );
+
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventOrder));
     } catch (error) {
@@ -211,6 +249,7 @@ export const eventOrderService = {
       return [];
     }
   },
+
   async getSellerEvents(sellerId: string): Promise<EventOrder[]> {
     try {
       const q = query(
@@ -219,6 +258,7 @@ export const eventOrderService = {
         where('payment_status', '==', 'completed'),
         orderBy('event_date', 'asc')
       );
+
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventOrder));
     } catch (error) {
@@ -226,6 +266,7 @@ export const eventOrderService = {
       return [];
     }
   },
+
   async getUpcomingEvents(userId: string): Promise<EventOrder[]> {
     try {
       const now = Timestamp.now();
@@ -236,6 +277,7 @@ export const eventOrderService = {
         where('event_date', '>=', now),
         orderBy('event_date', 'asc')
       );
+
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventOrder));
     } catch (error) {
@@ -243,6 +285,7 @@ export const eventOrderService = {
       return [];
     }
   },
+
   async incrementEventParticipants(productId: string, count: number = 1): Promise<void> {
     try {
       const productRef = doc(db, 'marketplace_products', productId);
@@ -254,6 +297,7 @@ export const eventOrderService = {
       console.error('Error incrementing participants:', error);
     }
   },
+
   async getEventStats(productId: string): Promise<{
     total_sales: number;
     total_participants: number;
@@ -263,15 +307,18 @@ export const eventOrderService = {
   }> {
     try {
       const attendees = await this.getEventAttendees(productId);
+
       const stats = attendees.reduce((acc, order) => {
         acc.total_sales += 1;
         acc.total_participants += order.quantity;
         acc.revenue += order.total_amount;
+
         if (order.check_in_status === 'checked_in') {
           acc.checked_in += order.quantity;
         } else if (order.check_in_status === 'awaited') {
           acc.awaited += order.quantity;
         }
+
         return acc;
       }, {
         total_sales: 0,
@@ -280,6 +327,7 @@ export const eventOrderService = {
         awaited: 0,
         revenue: 0
       });
+
       return stats;
     } catch (error) {
       console.error('Error calculating event stats:', error);
@@ -292,6 +340,7 @@ export const eventOrderService = {
       };
     }
   },
+
   async calculateWalletPayment(totalAmount: number, userId: string): Promise<{
     walletBalance: number;
     walletAmount: number;
@@ -301,6 +350,7 @@ export const eventOrderService = {
     try {
       const wallet = await walletService.getWallet(userId);
       const walletBalance = wallet?.balance || 0;
+
       if (walletBalance >= totalAmount) {
         return {
           walletBalance,

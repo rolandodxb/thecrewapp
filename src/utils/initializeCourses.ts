@@ -1,16 +1,13 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 import { courses } from '../data/coursesData';
 
 export const initializeDefaultCourses = async (): Promise<void> => {
   try {
-    const { data: existingCourses, error } = await supabase
-      .from('courses')
-      .select('id')
-      .limit(1);
+    const coursesRef = collection(db, 'courses');
+    const existingCourses = await getDocs(coursesRef);
 
-    if (error) throw error;
-
-    if (existingCourses && existingCourses.length > 0) {
+    if (existingCourses.size > 0) {
       console.log('Courses already exist, skipping initialization');
       return;
     }
@@ -19,9 +16,7 @@ export const initializeDefaultCourses = async (): Promise<void> => {
 
     for (const course of courses) {
       const courseData = {
-        id: course.id,
-        title: course.title,
-        description: course.description,
+        ...course,
         coach_id: 'system',
         allow_download: false,
         content_type: 'text',
@@ -29,11 +24,8 @@ export const initializeDefaultCourses = async (): Promise<void> => {
         updated_at: new Date().toISOString(),
       };
 
-      const { error: insertError } = await supabase
-        .from('courses')
-        .insert(courseData);
-
-      if (insertError) throw insertError;
+      const docRef = doc(db, 'courses', course.id);
+      await setDoc(docRef, courseData);
       console.log(`Created course: ${course.title}`);
     }
 

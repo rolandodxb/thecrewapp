@@ -1,4 +1,19 @@
-import { supabase } from '../lib/auth';
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  onSnapshot,
+  orderBy,
+  updateDoc,
+  doc,
+  writeBatch,
+  Timestamp,
+  getDocs,
+  limit
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 export interface FCMNotification {
   id?: string;
@@ -11,8 +26,8 @@ export interface FCMNotification {
   actionUrl?: string;
   data?: any;
   imageUrl?: string;
-  createdAt: string;
-  readAt?: string;
+  createdAt: Timestamp;
+  readAt?: Timestamp;
 }
 
 export interface FCMToken {
@@ -20,9 +35,12 @@ export interface FCMToken {
   token: string;
   device: string;
   browser: string;
-  createdAt: string;
-  lastUsed: string;
+  createdAt: Timestamp;
+  lastUsed: Timestamp;
 }
+
+const notificationsCollection = 'fcmNotifications';
+const tokensCollection = 'fcmTokens';
 
 export async function requestNotificationPermission(userId: string): Promise<string | null> {
   try {
@@ -32,10 +50,19 @@ export async function requestNotificationPermission(userId: string): Promise<str
       return null;
     }
 
-    console.log('FCM has been removed - using Supabase notifications instead');
+    const messaging = getMessaging();
+    const token = await getToken(messaging, {
+      vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+    });
+
+    if (token) {
+      await saveFCMToken(userId, token);
+      return token;
+    }
+
     return null;
   } catch (error) {
-    console.error('Error requesting notification permission:', error);
+    console.error('Error getting FCM token:', error);
     return null;
   }
 }
@@ -46,150 +73,116 @@ export async function saveFCMToken(userId: string, token: string) {
     browser: getBrowserInfo(),
   };
 
-  const { data: existingToken, error: queryError } = await supabase
-    .from('fcm_tokens')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('token', token)
-    .maybeSingle();
+  const existingTokenQuery = query(
+    collection(db, tokensCollection),
+    where('userId', '==', userId),
+    where('token', '==', token)
+  );
 
-  if (queryError) throw queryError;
+  const snapshot = await getDocs(existingTokenQuery);
 
-  if (!existingToken) {
-    const { error } = await supabase
-      .from('fcm_tokens')
-      .insert({
-        user_id: userId,
-        token,
-        ...deviceInfo,
-        created_at: new Date().toISOString(),
-        last_used: new Date().toISOString(),
-      });
-
-    if (error) throw error;
+  if (snapshot.empty) {
+    await addDoc(collection(db, tokensCollection), {
+      userId,
+      token,
+      ...deviceInfo,
+      createdAt: Timestamp.now(),
+      lastUsed: Timestamp.now(),
+    });
   } else {
-    const { error } = await supabase
-      .from('fcm_tokens')
-      .update({
-        last_used: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .eq('token', token);
-
-    if (error) throw error;
+    const docRef = doc(db, tokensCollection, snapshot.docs[0].id);
+    await updateDoc(docRef, {
+      lastUsed: Timestamp.now(),
+    });
   }
 }
 
 export function listenToForegroundMessages(callback: (payload: any) => void) {
-  console.log('FCM foreground messages disabled - using Supabase real-time instead');
-  return () => {};
+  try {
+    const messaging = getMessaging();
+    return onMessage(messaging, callback);
+  } catch (error) {
+    console.error('Error setting up foreground message listener:', error);
+    return () => {};
+  }
 }
 
 export async function createNotification(notification: Omit<FCMNotification, 'id' | 'createdAt' | 'read'>) {
-  const { data, error } = await supabase
-    .from('fcm_notifications')
-    .insert({
-      ...notification,
-      user_id: notification.userId,
-      read: false,
-      created_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
+  const docRef = await addDoc(collection(db, notificationsCollection), {
+    ...notification,
+    read: false,
+    createdAt: Timestamp.now(),
+  });
 
-  if (error) throw error;
-  return data.id;
+  return docRef.id;
 }
 
 export function subscribeToUserNotifications(
   userId: string,
   callback: (notifications: FCMNotification[]) => void
 ) {
-  const channel = supabase
-    .channel(`user-notifications-${userId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'fcm_notifications',
-        filter: `user_id=eq.${userId}`,
-      },
-      () => {
-        supabase
-          .from('fcm_notifications')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(50)
-          .then(({ data }) => {
-            if (data) callback(data as FCMNotification[]);
-          });
-      }
-    )
-    .subscribe();
+  const q = query(
+    collection(db, notificationsCollection),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc'),
+    limit(50)
+  );
 
-  supabase
-    .from('fcm_notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(50)
-    .then(({ data }) => {
-      if (data) callback(data as FCMNotification[]);
-    });
+  return onSnapshot(q, (snapshot) => {
+    const notifications = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as FCMNotification[];
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+    callback(notifications);
+  });
 }
 
 export async function markNotificationAsRead(notificationId: string) {
-  const { error } = await supabase
-    .from('fcm_notifications')
-    .update({
-      read: true,
-      read_at: new Date().toISOString(),
-    })
-    .eq('id', notificationId);
-
-  if (error) throw error;
+  const docRef = doc(db, notificationsCollection, notificationId);
+  await updateDoc(docRef, {
+    read: true,
+    readAt: Timestamp.now(),
+  });
 }
 
 export async function markAllNotificationsAsRead(userId: string) {
-  const { error } = await supabase
-    .from('fcm_notifications')
-    .update({
-      read: true,
-      read_at: new Date().toISOString(),
-    })
-    .eq('user_id', userId)
-    .eq('read', false);
+  const q = query(
+    collection(db, notificationsCollection),
+    where('userId', '==', userId),
+    where('read', '==', false)
+  );
 
-  if (error) throw error;
+  const snapshot = await getDocs(q);
+  const batch = writeBatch(db);
+
+  snapshot.docs.forEach((document) => {
+    batch.update(document.ref, {
+      read: true,
+      readAt: Timestamp.now(),
+    });
+  });
+
+  await batch.commit();
 }
 
 export async function deleteNotification(notificationId: string) {
-  const { error } = await supabase
-    .from('fcm_notifications')
-    .update({
-      deleted: true,
-      deleted_at: new Date().toISOString(),
-    })
-    .eq('id', notificationId);
-
-  if (error) throw error;
+  const docRef = doc(db, notificationsCollection, notificationId);
+  await updateDoc(docRef, {
+    deleted: true,
+    deletedAt: Timestamp.now(),
+  });
 }
 
 export async function getUnreadCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('fcm_notifications')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('read', false);
+  const q = query(
+    collection(db, notificationsCollection),
+    where('userId', '==', userId),
+    where('read', '==', false)
+  );
 
-  if (error) throw error;
-  return count || 0;
+  const snapshot = await getDocs(q);
+  return snapshot.size;
 }
 
 function getDeviceType(): string {

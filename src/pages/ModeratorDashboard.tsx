@@ -3,7 +3,9 @@ import { Shield, AlertTriangle, CheckCircle, XCircle, Flag, MessageCircle, Users
 import { motion } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/auth';
+import { collection, query, getDocs, where, orderBy, limit, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+
 interface ModerationLog {
   id: string;
   userId: string;
@@ -19,12 +21,14 @@ interface ModerationLog {
   ruleViolations?: string[];
   status: 'pending' | 'reviewed' | 'appealed' | 'resolved';
 }
+
 interface ModStats {
   totalViolations: number;
   warnings: number;
   blocked: number;
   criticalToday: number;
 }
+
 export default function ModeratorDashboard() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
@@ -37,17 +41,20 @@ export default function ModeratorDashboard() {
   });
   const [logs, setLogs] = useState<ModerationLog[]>([]);
   const [filter, setFilter] = useState<'all' | 'warnings' | 'blocked' | 'critical'>('all');
+
   useEffect(() => {
     if (currentUser?.role === 'moderator' || currentUser?.role === 'governor') {
       loadModeratorData();
     }
   }, [currentUser, filter]);
+
   const loadModeratorData = async () => {
     setLoading(true);
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayTimestamp = Timestamp.fromDate(today);
+
       let logsQuery;
       if (filter === 'warnings') {
         logsQuery = query(
@@ -77,13 +84,16 @@ export default function ModeratorDashboard() {
           limit(100)
         );
       }
+
       const logsSnapshot = await getDocs(logsQuery);
       const moderationLogs: ModerationLog[] = [];
       let warningCount = 0;
       let blockedCount = 0;
       let criticalTodayCount = 0;
+
       logsSnapshot.forEach((doc) => {
         const log = doc.data();
+
         moderationLogs.push({
           id: doc.id,
           userId: log.userId,
@@ -99,16 +109,19 @@ export default function ModeratorDashboard() {
           ruleViolations: log.ruleViolations,
           status: log.status || 'pending'
         });
+
         if (log.action === 'warn') warningCount++;
         if (log.action === 'block') blockedCount++;
         if (log.severity === 'CRITICAL' && log.timestamp?.toDate() >= today) criticalTodayCount++;
       });
+
       setStats({
         totalViolations: logsSnapshot.size,
         warnings: warningCount,
         blocked: blockedCount,
         criticalToday: criticalTodayCount
       });
+
       setLogs(moderationLogs);
     } catch (error) {
       console.error('Error loading moderator data:', error);
@@ -116,6 +129,7 @@ export default function ModeratorDashboard() {
       setLoading(false);
     }
   };
+
   const handleModeration = async (itemId: string, action: 'approve' | 'reject') => {
     try {
       const postRef = doc(db, 'community_posts', itemId);
@@ -124,6 +138,7 @@ export default function ModeratorDashboard() {
         [`${action}dAt`]: Timestamp.now(),
         [`${action}dBy`]: currentUser?.uid
       });
+
       alert(`Content ${action}d successfully`);
       loadModeratorData();
     } catch (error) {
@@ -131,6 +146,7 @@ export default function ModeratorDashboard() {
       alert(`Failed to ${action} content`);
     }
   };
+
   if (!currentUser || (currentUser.role !== 'moderator' && currentUser.role !== 'governor')) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50 to-gray-100 flex items-center justify-center p-4">
@@ -150,6 +166,7 @@ export default function ModeratorDashboard() {
       </div>
     );
   }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -157,6 +174,7 @@ export default function ModeratorDashboard() {
       </div>
     );
   }
+
   return (
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -216,6 +234,7 @@ export default function ModeratorDashboard() {
             </div>
           </div>
         </div>
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <motion.div
@@ -232,6 +251,7 @@ export default function ModeratorDashboard() {
             <p className="text-gray-600 text-sm mb-1">Total Violations</p>
             <p className="text-2xl font-bold text-gray-900">{stats.totalViolations}</p>
           </motion.div>
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -247,6 +267,7 @@ export default function ModeratorDashboard() {
             <p className="text-gray-600 text-sm mb-1">Warnings Issued</p>
             <p className="text-2xl font-bold text-gray-900">{stats.warnings}</p>
           </motion.div>
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -262,6 +283,7 @@ export default function ModeratorDashboard() {
             <p className="text-gray-600 text-sm mb-1">Content Blocked</p>
             <p className="text-2xl font-bold text-gray-900">{stats.blocked}</p>
           </motion.div>
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -278,6 +300,7 @@ export default function ModeratorDashboard() {
             <p className="text-2xl font-bold text-gray-900">{stats.criticalToday}</p>
           </motion.div>
         </div>
+
         {/* Moderation Logs */}
         <div className="bg-white/60 backdrop-blur-xl rounded-xl border border-white/30 shadow-lg overflow-hidden">
           <div className="p-6 border-b border-gray-200">

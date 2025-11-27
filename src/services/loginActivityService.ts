@@ -1,9 +1,21 @@
-import { supabase } from '../lib/auth';
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  Timestamp,
+  deleteDoc,
+  doc,
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 export interface LoginActivity {
   id?: string;
   userId: string;
-  timestamp: string;
+  timestamp: Timestamp;
   deviceType: string;
   browser: string;
   os: string;
@@ -17,10 +29,12 @@ export interface LoginActivity {
   success: boolean;
 }
 
+const loginActivityCollection = 'loginActivity';
+
 export async function recordLoginActivity(userId: string, success: boolean = true) {
   const deviceInfo = getDeviceInfo();
-  let ipInfo: { ip?: string; location?: any } = {};
 
+  let ipInfo: { ip?: string; location?: any } = {};
   try {
     ipInfo = await Promise.race([
       getIPInfo(),
@@ -32,77 +46,68 @@ export async function recordLoginActivity(userId: string, success: boolean = tru
     console.warn('Could not fetch IP info, continuing without it');
   }
 
-  const activity = {
-    user_id: userId,
-    timestamp: new Date().toISOString(),
-    device_type: deviceInfo.deviceType,
+  const activity: Omit<LoginActivity, 'id'> = {
+    userId,
+    timestamp: Timestamp.now(),
+    deviceType: deviceInfo.deviceType,
     browser: deviceInfo.browser,
     os: deviceInfo.os,
-    user_agent: navigator.userAgent,
-    ip_address: ipInfo.ip || 'Unknown',
+    userAgent: navigator.userAgent,
+    ipAddress: ipInfo.ip || 'Unknown',
     location: ipInfo.location || {},
     success,
   };
 
-  const { data, error } = await supabase
-    .from('login_activity')
-    .insert(activity)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data.id;
+  const docRef = await addDoc(collection(db, loginActivityCollection), activity);
+  return docRef.id;
 }
 
 export async function getUserLoginHistory(userId: string, limitCount: number = 10): Promise<LoginActivity[]> {
-  const { data, error } = await supabase
-    .from('login_activity')
-    .select('*')
-    .eq('user_id', userId)
-    .order('timestamp', { ascending: false })
-    .limit(limitCount);
+  // First get login history from loginActivity collection
+  const q = query(
+    collection(db, loginActivityCollection),
+    where('userId', '==', userId),
+    orderBy('timestamp', 'desc'),
+    limit(limitCount)
+  );
 
-  if (error) throw error;
+  const snapshot = await getDocs(q);
+  const activities = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LoginActivity));
 
-  const activities = (data || []).map(row => ({
-    id: row.id,
-    userId: row.user_id,
-    timestamp: row.timestamp,
-    deviceType: row.device_type,
-    browser: row.browser,
-    os: row.os,
-    userAgent: row.user_agent,
-    ipAddress: row.ip_address,
-    location: row.location,
-    success: row.success
-  }));
-
+  // Also check user_points collection for last_login data
   try {
-    const { data: userPointsData } = await supabase
-      .from('user_points')
-      .select('last_login')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const userPointsQuery = query(
+      collection(db, 'user_points'),
+      where('user_id', '==', userId),
+      limit(1)
+    );
+    const userPointsSnapshot = await getDocs(userPointsQuery);
 
-    if (userPointsData?.last_login) {
-      const lastLoginTime = new Date(userPointsData.last_login).getTime();
-      const deviceInfo = getDeviceInfo();
+    if (!userPointsSnapshot.empty) {
+      const userPointsData = userPointsSnapshot.docs[0].data();
 
-      const alreadyRecorded = activities.some(a =>
-        Math.abs(new Date(a.timestamp).getTime() - lastLoginTime) < 60000
-      );
+      // If last_login exists and it's not already in activities, add it
+      if (userPointsData.last_login) {
+        const lastLoginTime = userPointsData.last_login;
+        const deviceInfo = getDeviceInfo();
 
-      if (!alreadyRecorded) {
-        activities.unshift({
-          id: 'from_user_points',
-          userId,
-          timestamp: userPointsData.last_login,
-          deviceType: deviceInfo.deviceType,
-          browser: deviceInfo.browser,
-          os: deviceInfo.os,
-          userAgent: navigator.userAgent,
-          success: true
-        });
+        // Check if this login is already recorded
+        const alreadyRecorded = activities.some(a =>
+          Math.abs(a.timestamp.toMillis() - lastLoginTime.toMillis()) < 60000 // within 1 minute
+        );
+
+        if (!alreadyRecorded) {
+          activities.unshift({
+            id: 'from_user_points',
+            userId,
+            timestamp: lastLoginTime,
+            deviceType: deviceInfo.deviceType,
+            browser: deviceInfo.browser,
+            os: deviceInfo.os,
+            userAgent: navigator.userAgent,
+            success: true
+          });
+        }
       }
     }
   } catch (error) {
@@ -113,81 +118,57 @@ export async function getUserLoginHistory(userId: string, limitCount: number = 1
 }
 
 export async function getRecentLogins(limitCount: number = 50): Promise<LoginActivity[]> {
-  const { data, error } = await supabase
-    .from('login_activity')
-    .select('*')
-    .order('timestamp', { ascending: false })
-    .limit(limitCount);
+  const q = query(
+    collection(db, loginActivityCollection),
+    orderBy('timestamp', 'desc'),
+    limit(limitCount)
+  );
 
-  if (error) throw error;
-
-  return (data || []).map(row => ({
-    id: row.id,
-    userId: row.user_id,
-    timestamp: row.timestamp,
-    deviceType: row.device_type,
-    browser: row.browser,
-    os: row.os,
-    userAgent: row.user_agent,
-    ipAddress: row.ip_address,
-    location: row.location,
-    success: row.success
-  }));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LoginActivity));
 }
 
 export async function getFailedLoginAttempts(userId: string, since: Date): Promise<LoginActivity[]> {
-  const { data, error } = await supabase
-    .from('login_activity')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('success', false)
-    .gte('timestamp', since.toISOString())
-    .order('timestamp', { ascending: false });
+  const sinceTimestamp = Timestamp.fromDate(since);
+  const q = query(
+    collection(db, loginActivityCollection),
+    where('userId', '==', userId),
+    where('success', '==', false),
+    where('timestamp', '>=', sinceTimestamp),
+    orderBy('timestamp', 'desc')
+  );
 
-  if (error) throw error;
-
-  return (data || []).map(row => ({
-    id: row.id,
-    userId: row.user_id,
-    timestamp: row.timestamp,
-    deviceType: row.device_type,
-    browser: row.browser,
-    os: row.os,
-    userAgent: row.user_agent,
-    ipAddress: row.ip_address,
-    location: row.location,
-    success: row.success
-  }));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LoginActivity));
 }
 
 export async function deleteLoginActivity(activityId: string) {
-  const { error } = await supabase
-    .from('login_activity')
-    .delete()
-    .eq('id', activityId);
-
-  if (error) throw error;
+  const docRef = doc(db, loginActivityCollection, activityId);
+  await deleteDoc(docRef);
 }
 
 export async function clearOldLoginActivity(userId: string, olderThanDays: number = 90) {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+  const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
 
-  const { data, error } = await supabase
-    .from('login_activity')
-    .delete()
-    .eq('user_id', userId)
-    .lt('timestamp', cutoffDate.toISOString())
-    .select('id');
+  const q = query(
+    collection(db, loginActivityCollection),
+    where('userId', '==', userId),
+    where('timestamp', '<', cutoffTimestamp)
+  );
 
-  if (error) throw error;
-  return data?.length || 0;
+  const snapshot = await getDocs(q);
+  const deletePromises = snapshot.docs.map((document) => deleteDoc(document.ref));
+  await Promise.all(deletePromises);
+
+  return snapshot.size;
 }
 
 function getDeviceInfo() {
   const ua = navigator.userAgent;
-  let deviceType = 'desktop';
 
+  let deviceType = 'desktop';
   if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
     deviceType = 'tablet';
   } else if (/Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(ua)) {

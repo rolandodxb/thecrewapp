@@ -13,7 +13,10 @@
  * - User reactions to posts and comments
  * - Any other user interactions
  */
-import { supabase } from '../lib/auth';
+
+import { collection, addDoc, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+
 interface NotificationPayload {
   userId: string;
   title: string;
@@ -24,6 +27,7 @@ interface NotificationPayload {
   imageUrl?: string;
   data?: any;
 }
+
 /**
  * Send a notification to a specific user
  */
@@ -34,17 +38,20 @@ export async function sendNotification(payload: NotificationPayload) {
       read: false,
       createdAt: Timestamp.now(),
     });
+
     // Also add to FCM notifications for push
     await addDoc(collection(db, 'fcmNotifications'), {
       ...payload,
       read: false,
       createdAt: Timestamp.now(),
     });
+
     console.log('✅ Notification sent:', payload.title);
   } catch (error) {
     console.error('❌ Error sending notification:', error);
   }
 }
+
 /**
  * Send notifications to multiple users
  */
@@ -54,6 +61,7 @@ export async function sendBulkNotifications(userIds: string[], payload: Omit<Not
   );
   await Promise.all(promises);
 }
+
 /**
  * Get all users in a conversation/group
  */
@@ -61,19 +69,25 @@ async function getConversationParticipants(conversationId: string, exceptUserId?
   const conversationRef = collection(db, 'conversations');
   const q = query(conversationRef, where('__name__', '==', conversationId));
   const snapshot = await getDocs(q);
+
   if (snapshot.empty) return [];
+
   const conversation = snapshot.docs[0].data();
   const participants = conversation.participants || [];
+
   return exceptUserId
     ? participants.filter((id: string) => id !== exceptUserId)
     : participants;
 }
+
 // ==================== CHAT NOTIFICATIONS ====================
+
 /**
  * Notify about new community chat message
  */
 export async function notifyCommunityMessage(senderId: string, senderName: string, message: string, conversationId: string) {
   const participants = await getConversationParticipants(conversationId, senderId);
+
   await sendBulkNotifications(participants, {
     title: `New message in Community Chat`,
     body: `${senderName}: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`,
@@ -82,6 +96,7 @@ export async function notifyCommunityMessage(senderId: string, senderName: strin
     actionUrl: '/chat',
   });
 }
+
 /**
  * Notify about new private chat message
  */
@@ -95,11 +110,13 @@ export async function notifyPrivateMessage(senderId: string, senderName: string,
     actionUrl: '/chat',
   });
 }
+
 /**
  * Notify about new group message
  */
 export async function notifyGroupMessage(senderId: string, senderName: string, groupName: string, message: string, conversationId: string) {
   const participants = await getConversationParticipants(conversationId, senderId);
+
   await sendBulkNotifications(participants, {
     title: `New message in ${groupName}`,
     body: `${senderName}: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`,
@@ -108,7 +125,9 @@ export async function notifyGroupMessage(senderId: string, senderName: string, g
     actionUrl: '/chat',
   });
 }
+
 // ==================== COMMUNITY FEED NOTIFICATIONS ====================
+
 /**
  * Notify post author about new comment
  */
@@ -123,6 +142,7 @@ export async function notifyPostComment(postAuthorId: string, commenterName: str
     data: { postId },
   });
 }
+
 /**
  * Notify post author about reaction
  */
@@ -134,6 +154,7 @@ export async function notifyPostReaction(postAuthorId: string, reactorName: stri
     laugh: '😂',
     wow: '😮',
   };
+
   await sendNotification({
     userId: postAuthorId,
     title: `${reactorName} reacted to your post`,
@@ -144,6 +165,7 @@ export async function notifyPostReaction(postAuthorId: string, reactorName: stri
     data: { postId },
   });
 }
+
 /**
  * Notify comment author about reply
  */
@@ -158,6 +180,7 @@ export async function notifyCommentReply(commentAuthorId: string, replierName: s
     data: { postId },
   });
 }
+
 /**
  * Notify comment author about reaction
  */
@@ -167,6 +190,7 @@ export async function notifyCommentReaction(commentAuthorId: string, reactorName
     thumbsUp: '👍',
     laugh: '😂',
   };
+
   await sendNotification({
     userId: commentAuthorId,
     title: `${reactorName} reacted to your comment`,
@@ -177,7 +201,9 @@ export async function notifyCommentReaction(commentAuthorId: string, reactorName
     data: { postId },
   });
 }
+
 // ==================== MARKETPLACE NOTIFICATIONS ====================
+
 /**
  * Notify seller about new order
  */
@@ -191,6 +217,7 @@ export async function notifyNewOrder(sellerId: string, productName: string, buye
     actionUrl: '/seller/dashboard',
   });
 }
+
 /**
  * Notify buyer about order status update
  */
@@ -201,6 +228,7 @@ export async function notifyOrderStatus(buyerId: string, productName: string, st
     delivered: 'has been delivered',
     cancelled: 'has been cancelled',
   };
+
   await sendNotification({
     userId: buyerId,
     title: 'Order Status Update',
@@ -211,6 +239,7 @@ export async function notifyOrderStatus(buyerId: string, productName: string, st
     data: { orderId },
   });
 }
+
 /**
  * Notify about new marketplace message
  */
@@ -224,7 +253,9 @@ export async function notifyMarketplaceMessage(recipientId: string, senderName: 
     actionUrl: '/marketplace',
   });
 }
+
 // ==================== COURSE NOTIFICATIONS ====================
+
 /**
  * Notify all students about new course
  */
@@ -233,6 +264,7 @@ export async function notifyNewCourse(courseName: string, description: string) {
   const studentsQuery = query(collection(db, 'users'), where('role', '==', 'student'));
   const studentsSnapshot = await getDocs(studentsQuery);
   const studentIds = studentsSnapshot.docs.map(doc => doc.id);
+
   await sendBulkNotifications(studentIds, {
     title: '📚 New Course Available!',
     body: `${courseName}: ${description.substring(0, 100)}${description.length > 100 ? '...' : ''}`,
@@ -241,6 +273,7 @@ export async function notifyNewCourse(courseName: string, description: string) {
     actionUrl: '/courses',
   });
 }
+
 /**
  * Notify enrolled students about course update
  */
@@ -254,6 +287,7 @@ export async function notifyCourseUpdate(courseId: string, courseName: string, u
     data: { courseId },
   });
 }
+
 /**
  * Notify all students about new module
  */
@@ -261,6 +295,7 @@ export async function notifyNewModule(moduleName: string, courseId: string, cour
   const studentsQuery = query(collection(db, 'users'), where('role', '==', 'student'));
   const studentsSnapshot = await getDocs(studentsQuery);
   const studentIds = studentsSnapshot.docs.map(doc => doc.id);
+
   await sendBulkNotifications(studentIds, {
     title: '✨ New Module Added!',
     body: `${moduleName} is now available in ${courseName}`,
@@ -270,6 +305,7 @@ export async function notifyNewModule(moduleName: string, courseId: string, cour
     data: { courseId },
   });
 }
+
 /**
  * Notify student about course completion
  */
@@ -284,6 +320,7 @@ export async function notifyCourseCompletion(studentId: string, courseName: stri
     data: { courseId },
   });
 }
+
 /**
  * Notify student about exam reminder
  */
@@ -298,7 +335,9 @@ export async function notifyExamReminder(studentId: string, examName: string, ti
     data: { courseId },
   });
 }
+
 // ==================== SYSTEM NOTIFICATIONS ====================
+
 /**
  * Notify all users about emergency shutdown
  */
@@ -306,6 +345,7 @@ export async function notifyEmergencyShutdown(featureName: string, reason: strin
   const allUsersQuery = collection(db, 'users');
   const allUsersSnapshot = await getDocs(allUsersQuery);
   const userIds = allUsersSnapshot.docs.map(doc => doc.id);
+
   await sendBulkNotifications(userIds, {
     title: '🚨 Emergency: Feature Temporarily Disabled',
     body: `${featureName} is temporarily unavailable. ${reason}${estimatedTime ? ` Estimated restore: ${estimatedTime}` : ''}`,
@@ -314,6 +354,7 @@ export async function notifyEmergencyShutdown(featureName: string, reason: strin
     actionUrl: '/notifications',
   });
 }
+
 /**
  * Notify all users about system update
  */
@@ -321,6 +362,7 @@ export async function notifySystemUpdate(updateTitle: string, updateDescription:
   const allUsersQuery = collection(db, 'users');
   const allUsersSnapshot = await getDocs(allUsersQuery);
   const userIds = allUsersSnapshot.docs.map(doc => doc.id);
+
   await sendBulkNotifications(userIds, {
     title: '📢 System Update',
     body: `${updateTitle}: ${updateDescription}`,
@@ -329,6 +371,7 @@ export async function notifySystemUpdate(updateTitle: string, updateDescription:
     actionUrl: '/whats-new',
   });
 }
+
 /**
  * Notify user about achievement
  */
@@ -342,6 +385,7 @@ export async function notifyAchievement(userId: string, achievementName: string,
     actionUrl: '/profile',
   });
 }
+
 /**
  * Notify user about points awarded
  */
@@ -355,6 +399,7 @@ export async function notifyPointsAwarded(userId: string, points: number, reason
     actionUrl: '/my-progress',
   });
 }
+
 /**
  * Notify user about support message response
  */
@@ -368,6 +413,7 @@ export async function notifySupportResponse(userId: string, supportAgentName: st
     actionUrl: '/support-chat',
   });
 }
+
 /**
  * Notify user about mention in comment/post
  */
@@ -381,6 +427,7 @@ export async function notifyMention(userId: string, mentionerName: string, conte
     actionUrl,
   });
 }
+
 /**
  * Notify about new follower (if following system exists)
  */
@@ -394,27 +441,32 @@ export async function notifyNewFollower(userId: string, followerName: string, fo
     actionUrl: `/profile/${followerId}`,
   });
 }
+
 // Export all notification functions
 export const comprehensiveNotifications = {
   // Chat
   notifyCommunityMessage,
   notifyPrivateMessage,
   notifyGroupMessage,
+
   // Community Feed
   notifyPostComment,
   notifyPostReaction,
   notifyCommentReply,
   notifyCommentReaction,
+
   // Marketplace
   notifyNewOrder,
   notifyOrderStatus,
   notifyMarketplaceMessage,
+
   // Courses
   notifyNewCourse,
   notifyCourseUpdate,
   notifyNewModule,
   notifyCourseCompletion,
   notifyExamReminder,
+
   // System
   notifyEmergencyShutdown,
   notifySystemUpdate,

@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { supabaseChatService, SupabaseChatMessage, Conversation } from '../services/supabaseChatService';
-import { auth } from '../lib/auth';
+import { auth } from '../lib/firebase';
 import { Search, Mic, Send, MessageCircle, Square, Smile, Paperclip, X, Play, Pause } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import EmojiPicker from 'emoji-picker-react';
+
 // Voice Message Player Component
 function VoiceMessagePlayer({ audioUrl, isOwn }: { audioUrl: string; isOwn: boolean }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -13,14 +14,17 @@ function VoiceMessagePlayer({ audioUrl, isOwn }: { audioUrl: string; isOwn: bool
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+
   // Validate URL before rendering
   if (!audioUrl || audioUrl.length < 100 || !audioUrl.includes('.webm')) {
     console.warn('⚠️ Invalid audio URL, skipping player:', audioUrl);
     return <p className="text-xs italic opacity-70">Voice message (unavailable)</p>;
   }
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
     const updateTime = () => setCurrentTime(audio.currentTime);
     const updateDuration = () => {
       console.log('✅ Audio duration loaded:', audio.duration);
@@ -41,11 +45,13 @@ function VoiceMessagePlayer({ audioUrl, isOwn }: { audioUrl: string; isOwn: bool
     const handleCanPlay = () => {
       console.log('✅ Audio can play');
     };
+
     audio.addEventListener('timeupdate', updateTime);
     audio.addEventListener('loadedmetadata', updateDuration);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
     audio.addEventListener('canplay', handleCanPlay);
+
     return () => {
       audio.removeEventListener('timeupdate', updateTime);
       audio.removeEventListener('loadedmetadata', updateDuration);
@@ -54,6 +60,7 @@ function VoiceMessagePlayer({ audioUrl, isOwn }: { audioUrl: string; isOwn: bool
       audio.removeEventListener('canplay', handleCanPlay);
     };
   }, []);
+
   useEffect(() => {
     console.log('🎵 VoiceMessagePlayer mounted:', {
       urlLength: audioUrl?.length,
@@ -62,6 +69,7 @@ function VoiceMessagePlayer({ audioUrl, isOwn }: { audioUrl: string; isOwn: bool
       audioType: audioUrl?.match(/data:([^;]+)/)?.[1]
     });
   }, [audioUrl]);
+
   const togglePlay = () => {
     if (!audioRef.current) return;
     if (isPlaying) {
@@ -71,13 +79,16 @@ function VoiceMessagePlayer({ audioUrl, isOwn }: { audioUrl: string; isOwn: bool
     }
     setIsPlaying(!isPlaying);
   };
+
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
   if (error) {
     return (
       <div className="text-xs text-red-500">
@@ -85,6 +96,7 @@ function VoiceMessagePlayer({ audioUrl, isOwn }: { audioUrl: string; isOwn: bool
       </div>
     );
   }
+
   return (
     <div className="flex items-center gap-2 min-w-[200px]">
       <audio ref={audioRef} src={audioUrl} preload="metadata" />
@@ -114,6 +126,7 @@ function VoiceMessagePlayer({ audioUrl, isOwn }: { audioUrl: string; isOwn: bool
     </div>
   );
 }
+
 export default function CommunityPage() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
@@ -134,7 +147,9 @@ export default function CommunityPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
   const conversationId = supabaseChatService.getPublicRoomId();
+
   useEffect(() => {
     const initializePublicRoom = async () => {
       await supabaseChatService.ensurePublicRoom();
@@ -147,8 +162,10 @@ export default function CommunityPage() {
     };
     initializePublicRoom();
   }, [conversationId]);
+
   useEffect(() => {
     if (!selectedConversation) return;
+
     setLoading(true);
     const unsubscribe = supabaseChatService.subscribeToMessages(
       selectedConversation.id,
@@ -161,19 +178,24 @@ export default function CommunityPage() {
         setLoading(false);
       }
     );
+
     return () => {
       unsubscribe();
     };
   }, [selectedConversation]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
   const handleSendMessage = async () => {
     if (!currentUser || (!messageText.trim() && !selectedFile) || !selectedConversation) return;
+
     setSending(true);
     try {
       let messageType: 'text' | 'image' | 'audio' | 'file' = 'text';
       let messageContent = messageText.trim();
+
       if (selectedFile) {
         if (selectedFile.name.startsWith('voice-') && selectedFile.type.startsWith('audio/')) {
           messageType = 'audio';
@@ -186,6 +208,7 @@ export default function CommunityPage() {
           messageContent = messageContent || '📎 File';
         }
       }
+
       await supabaseChatService.sendMessage(
         selectedConversation.id,
         messageContent,
@@ -202,6 +225,7 @@ export default function CommunityPage() {
       setSending(false);
     }
   };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -212,30 +236,36 @@ export default function CommunityPage() {
       setSelectedFile(file);
     }
   };
+
   const handleEmojiClick = (emojiData: any) => {
     setMessageText(prev => prev + emojiData.emoji);
     setShowEmojiPicker(false);
   };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
+
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const audioFile = new File([audioBlob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
         setSelectedFile(audioFile);
         stream.getTracks().forEach(track => track.stop());
       };
+
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
+
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
@@ -244,6 +274,7 @@ export default function CommunityPage() {
       alert('Could not access microphone. Please check permissions.');
     }
   };
+
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
@@ -253,11 +284,13 @@ export default function CommunityPage() {
       }
     }
   };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
   useEffect(() => {
     return () => {
       if (recordingTimerRef.current) {
@@ -265,9 +298,11 @@ export default function CommunityPage() {
       }
     };
   }, []);
+
   const filteredConversations = conversations.filter(conv =>
     conv?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
   if (!currentUser) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -275,6 +310,7 @@ export default function CommunityPage() {
       </div>
     );
   }
+
   return (
     <div className="h-screen flex bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200 p-4 gap-4 overflow-hidden">
       {/* Left Sidebar - Full screen on mobile when no conversation selected */}
@@ -299,6 +335,7 @@ export default function CommunityPage() {
             back
           </button>
         </div>
+
         {/* Search Input */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -311,6 +348,7 @@ export default function CommunityPage() {
           />
           <Mic className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         </div>
+
         {/* Conversation List Card */}
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
@@ -321,6 +359,7 @@ export default function CommunityPage() {
           <div className="p-4">
             <p className="text-sm text-gray-500 font-medium">conversation list</p>
           </div>
+
           <div className="flex-1 overflow-y-auto px-2">
             <AnimatePresence mode="popLayout">
               {filteredConversations.map((conv, index) => (
@@ -353,6 +392,7 @@ export default function CommunityPage() {
           </div>
         </motion.div>
       </motion.div>
+
       {/* Main Chat Area */}
       <motion.div
         initial={{ x: 50, opacity: 0 }}
@@ -382,6 +422,7 @@ export default function CommunityPage() {
                 <Mic className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               </div>
             </div>
+
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto px-8 py-6">
               {!loading && messages.length === 0 ? (
@@ -401,6 +442,7 @@ export default function CommunityPage() {
                     {messages.map((message, index) => {
                       const isOwn = message.sender_id === currentUser?.uid;
                       const isVoiceMessage = message.content === '🎤 Voice message' && message.attachment_url;
+
                       // Debug all messages with attachments
                       if (message.attachment_url) {
                         console.log('📎 Message with attachment:', {
@@ -413,6 +455,7 @@ export default function CommunityPage() {
                           attachmentMetadata: message.attachment_metadata
                         });
                       }
+
                       return (
                         <motion.div
                           key={message.id || `msg-${index}`}
@@ -445,6 +488,7 @@ export default function CommunityPage() {
                                   {message.sender_name}
                                 </p>
                               )}
+
                               {/* Voice Message */}
                               {(message.content === '🎤 Voice message' ||
                                 (message.attachment_metadata?.name?.startsWith('voice-') && message.attachment_url)) &&
@@ -473,6 +517,7 @@ export default function CommunityPage() {
                                 /* Text/Regular Message */
                                 <p className="text-sm leading-relaxed">{message.content}</p>
                               )}
+
                               <p className={`text-xs mt-1 ${isOwn ? 'text-white/70' : 'text-gray-500'}`}>
                                 {new Date(message.created_at).toLocaleTimeString([], {
                                   hour: '2-digit',
@@ -489,6 +534,7 @@ export default function CommunityPage() {
                 </div>
               )}
             </div>
+
             {/* Message Input */}
             <div className="p-4 border-t border-gray-100">
               {isRecording && (
@@ -501,6 +547,7 @@ export default function CommunityPage() {
                   <span className="text-red-900 font-medium">Recording: {formatTime(recordingTime)}</span>
                 </motion.div>
               )}
+
               {selectedFile && !isRecording && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -516,6 +563,7 @@ export default function CommunityPage() {
                   </button>
                 </motion.div>
               )}
+
               <div className="flex items-center gap-3 max-w-4xl mx-auto relative">
                 {showEmojiPicker && (
                   <motion.div
@@ -527,6 +575,7 @@ export default function CommunityPage() {
                     <EmojiPicker onEmojiClick={handleEmojiClick} />
                   </motion.div>
                 )}
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -534,6 +583,7 @@ export default function CommunityPage() {
                   onChange={handleFileSelect}
                   className="hidden"
                 />
+
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -544,6 +594,7 @@ export default function CommunityPage() {
                 >
                   <Paperclip className="w-5 h-5 text-gray-600" />
                 </motion.button>
+
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -554,6 +605,7 @@ export default function CommunityPage() {
                 >
                   <Smile className="w-5 h-5 text-gray-600" />
                 </motion.button>
+
                 <div className="flex-1 relative">
                   <input
                     type="text"
@@ -588,6 +640,7 @@ export default function CommunityPage() {
                     )}
                   </motion.button>
                 </div>
+
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}

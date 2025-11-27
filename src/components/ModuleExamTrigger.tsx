@@ -5,32 +5,41 @@ import { courseExams } from '../data/examData';
 import ExamInterface from './ExamInterface';
 import ExamResultModal from './ExamResultModal';
 import { ExamResult } from '../services/examService';
-import { supabase } from '../lib/auth';
+import { doc, getDoc, query, collection, where, getDocs } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+
 interface ModuleExamTriggerProps {
   userId: string;
   courseIds: string[];
   moduleId: string;
   moduleName: string;
 }
+
 export default function ModuleExamTrigger({ userId, courseIds, moduleId, moduleName }: ModuleExamTriggerProps) {
   const [allCoursesComplete, setAllCoursesComplete] = useState(false);
   const [showExam, setShowExam] = useState(false);
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const [combinedQuestions, setCombinedQuestions] = useState<any[]>([]);
+
   useEffect(() => {
     checkAllCoursesComplete();
   }, [userId, courseIds]);
+
   const checkAllCoursesComplete = async () => {
     if (!userId || courseIds.length === 0) return;
+
     try {
       console.log('ModuleExamTrigger: Checking completion for courses:', courseIds);
+
       const progressChecks = await Promise.all(
         courseIds.map(async (courseId) => {
           const courseProgress = await getCourseProgress(userId, courseId);
+
           const examsRef = collection(db, 'exams');
           const examQuery = query(examsRef, where('courseId', '==', courseId));
           const examSnapshot = await getDocs(examQuery);
+
           let examPassed = false;
           if (!examSnapshot.empty) {
             const exam = examSnapshot.docs[0];
@@ -41,14 +50,17 @@ export default function ModuleExamTrigger({ userId, courseIds, moduleId, moduleN
           } else {
             examPassed = true;
           }
+
           const isComplete = courseProgress?.completed === true && examPassed;
           console.log(`Course ${courseId} - completed:`, courseProgress?.completed, 'exam passed:', examPassed, 'isComplete:', isComplete);
           return isComplete;
         })
       );
+
       const allComplete = progressChecks.every(complete => complete === true);
       console.log('ModuleExamTrigger: All courses complete:', allComplete);
       setAllCoursesComplete(allComplete);
+
       if (allComplete) {
         const questions = courseIds
           .map(courseId => {
@@ -56,6 +68,7 @@ export default function ModuleExamTrigger({ userId, courseIds, moduleId, moduleN
             return exam?.questions || [];
           })
           .flat();
+
         console.log('ModuleExamTrigger: Combined questions:', questions.length);
         setCombinedQuestions(questions);
       }
@@ -63,22 +76,27 @@ export default function ModuleExamTrigger({ userId, courseIds, moduleId, moduleN
       console.error('Error checking course completion:', error);
     }
   };
+
   const handleStartExam = () => {
     console.log('ModuleExamTrigger: Starting combined exam');
     setShowExam(true);
   };
+
   const handleExamComplete = (result: ExamResult) => {
     console.log('ModuleExamTrigger: Exam completed with result:', result);
     setExamResult(result);
     setShowExam(false);
     setShowResultModal(true);
   };
+
   const handleCloseResultModal = () => {
     setShowResultModal(false);
   };
+
   if (!allCoursesComplete || courseIds.length === 0) {
     return null;
   }
+
   if (showExam && combinedQuestions.length > 0) {
     const mockExam = {
       id: `module_${moduleId}_exam`,
@@ -100,8 +118,10 @@ export default function ModuleExamTrigger({ userId, courseIds, moduleId, moduleN
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+
     return <ExamInterface exam={mockExam} onComplete={handleExamComplete} />;
   }
+
   return (
     <>
       <div className="glass-card p-6 mb-6 border-2 border-green-500">
@@ -116,6 +136,7 @@ export default function ModuleExamTrigger({ userId, courseIds, moduleId, moduleN
             </p>
           </div>
         </div>
+
         <div className="flex items-center gap-3 mb-4">
           {courseIds.map((_, index) => (
             <div key={index} className="flex items-center gap-2">
@@ -124,6 +145,7 @@ export default function ModuleExamTrigger({ userId, courseIds, moduleId, moduleN
             </div>
           ))}
         </div>
+
         <button
           onClick={handleStartExam}
           className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl font-bold hover:shadow-lg transition"
@@ -131,6 +153,7 @@ export default function ModuleExamTrigger({ userId, courseIds, moduleId, moduleN
           Take Final Exam ({combinedQuestions.length} Questions)
         </button>
       </div>
+
       {showResultModal && examResult && (
         <ExamResultModal
           isOpen={showResultModal}

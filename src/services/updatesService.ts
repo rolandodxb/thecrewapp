@@ -1,6 +1,19 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  addDoc,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+  Timestamp,
+  where,
+  QueryConstraint
+} from 'firebase/firestore';
 import { createNotification } from './unifiedNotificationService';
+
 export type UpdateType = 'feature' | 'fix' | 'improvement' | 'announcement';
+
 export interface Update {
   id?: string;
   type: UpdateType;
@@ -11,6 +24,7 @@ export interface Update {
   createdAt: Timestamp;
   notifyUsers?: boolean;
 }
+
 export const updatesService = {
   async createUpdate(updateData: Omit<Update, 'id' | 'createdAt'>): Promise<Update | null> {
     try {
@@ -18,12 +32,16 @@ export const updatesService = {
         ...updateData,
         createdAt: Timestamp.now(),
       };
+
       const docRef = await addDoc(collection(db, 'updates'), newUpdate);
+
       if (updateData.notifyUsers) {
         const usersSnapshot = await getDocs(collection(db, 'users'));
+
         const notificationPromises = usersSnapshot.docs.map(userDoc => {
           let notifType: any = 'system_feature';
           let priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium';
+
           switch (updateData.type) {
             case 'feature':
               notifType = 'system_feature';
@@ -42,6 +60,7 @@ export const updatesService = {
               priority = 'high';
               break;
           }
+
           return createNotification({
             user_id: userDoc.id,
             type: notifType,
@@ -56,8 +75,10 @@ export const updatesService = {
             }
           });
         });
+
         await Promise.all(notificationPromises);
       }
+
       return {
         id: docRef.id,
         ...newUpdate,
@@ -67,6 +88,7 @@ export const updatesService = {
       return null;
     }
   },
+
   async getAllUpdates(limitCount: number = 50): Promise<Update[]> {
     try {
       const q = query(
@@ -74,6 +96,7 @@ export const updatesService = {
         orderBy('createdAt', 'desc'),
         limit(limitCount)
       );
+
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({
         id: doc.id,
@@ -84,6 +107,7 @@ export const updatesService = {
       return [];
     }
   },
+
   async getUpdatesByType(type: UpdateType, limitCount: number = 20): Promise<Update[]> {
     try {
       const constraints: QueryConstraint[] = [
@@ -91,8 +115,10 @@ export const updatesService = {
         orderBy('createdAt', 'desc'),
         limit(limitCount)
       ];
+
       const q = query(collection(db, 'updates'), ...constraints);
       const snapshot = await getDocs(q);
+
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -102,16 +128,20 @@ export const updatesService = {
       return [];
     }
   },
+
   async getRecentUpdates(days: number = 30): Promise<Update[]> {
     try {
       const dateThreshold = new Date();
       dateThreshold.setDate(dateThreshold.getDate() - days);
+
       const constraints: QueryConstraint[] = [
         where('createdAt', '>=', Timestamp.fromDate(dateThreshold)),
         orderBy('createdAt', 'desc')
       ];
+
       const q = query(collection(db, 'updates'), ...constraints);
       const snapshot = await getDocs(q);
+
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -121,6 +151,7 @@ export const updatesService = {
       return [];
     }
   },
+
   getUpdateIcon(type: UpdateType): string {
     switch (type) {
       case 'feature':
@@ -135,6 +166,7 @@ export const updatesService = {
         return '📝';
     }
   },
+
   getUpdateColor(type: UpdateType): string {
     switch (type) {
       case 'feature':

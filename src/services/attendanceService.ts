@@ -1,4 +1,16 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  Timestamp,
+} from 'firebase/firestore';
+
 export interface AttendanceRecord {
   id: string;
   activity_id: string;
@@ -17,6 +29,7 @@ export interface AttendanceRecord {
   seller_id: string;
   seller_name: string;
 }
+
 export const createAttendanceRecord = async (
   orderId: string,
   activityId: string,
@@ -32,6 +45,7 @@ export const createAttendanceRecord = async (
 ): Promise<string> => {
   try {
     const attendanceRef = doc(collection(db, 'activity_attendance'));
+
     const attendance: Omit<AttendanceRecord, 'id'> = {
       activity_id: activityId,
       activity_title: activityTitle,
@@ -49,6 +63,7 @@ export const createAttendanceRecord = async (
       seller_id: sellerId,
       seller_name: sellerName,
     };
+
     await setDoc(attendanceRef, attendance);
     console.log('Attendance record created:', attendanceRef.id);
     return attendanceRef.id;
@@ -57,6 +72,7 @@ export const createAttendanceRecord = async (
     throw error;
   }
 };
+
 export const getAttendanceForActivity = async (
   activityId: string
 ): Promise<AttendanceRecord[]> => {
@@ -67,6 +83,7 @@ export const getAttendanceForActivity = async (
       where('activity_id', '==', activityId),
       orderBy('created_at', 'desc')
     );
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -77,6 +94,7 @@ export const getAttendanceForActivity = async (
     return [];
   }
 };
+
 export const getSellerAttendance = async (
   sellerId: string
 ): Promise<AttendanceRecord[]> => {
@@ -87,6 +105,7 @@ export const getSellerAttendance = async (
       where('seller_id', '==', sellerId),
       orderBy('created_at', 'desc')
     );
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -97,12 +116,14 @@ export const getSellerAttendance = async (
     return [];
   }
 };
+
 export const getAttendanceRecord = async (
   attendanceId: string
 ): Promise<AttendanceRecord | null> => {
   try {
     const attendanceRef = doc(db, 'activity_attendance', attendanceId);
     const attendanceSnap = await getDoc(attendanceRef);
+
     if (attendanceSnap.exists()) {
       return { id: attendanceSnap.id, ...attendanceSnap.data() } as AttendanceRecord;
     }
@@ -112,6 +133,7 @@ export const getAttendanceRecord = async (
     return null;
   }
 };
+
 export const exportAttendanceToCSV = (attendance: AttendanceRecord[]): string => {
   const headers = ['Name', 'Email', 'Phone', 'Amount Paid', 'Currency', 'Payment Date', 'Confirmed'];
   const rows = attendance.map(record => [
@@ -123,9 +145,11 @@ export const exportAttendanceToCSV = (attendance: AttendanceRecord[]): string =>
     record.payment_date?.toDate?.()?.toLocaleDateString() || 'N/A',
     record.attendance_confirmed ? 'Yes' : 'No',
   ]);
+
   const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
   return csv;
 };
+
 export const downloadAttendanceCSV = (attendance: AttendanceRecord[], activityTitle: string) => {
   const csv = exportAttendanceToCSV(attendance);
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -136,9 +160,11 @@ export const downloadAttendanceCSV = (attendance: AttendanceRecord[], activityTi
   a.click();
   window.URL.revokeObjectURL(url);
 };
+
 export const printAttendance = (attendance: AttendanceRecord[], activityTitle: string) => {
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -161,6 +187,7 @@ export const printAttendance = (attendance: AttendanceRecord[], activityTitle: s
       <h1>Attendance Report: ${activityTitle}</h1>
       <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
       <p><strong>Total Attendees:</strong> ${attendance.length}</p>
+
       <table>
         <thead>
           <tr>
@@ -185,9 +212,11 @@ export const printAttendance = (attendance: AttendanceRecord[], activityTitle: s
           `).join('')}
         </tbody>
       </table>
+
       <div class="footer">
         <p>This attendance report is generated automatically by the marketplace system.</p>
       </div>
+
       <script>
         window.onload = () => {
           window.print();
@@ -196,6 +225,7 @@ export const printAttendance = (attendance: AttendanceRecord[], activityTitle: s
     </body>
     </html>
   `;
+
   printWindow.document.write(html);
   printWindow.document.close();
 };

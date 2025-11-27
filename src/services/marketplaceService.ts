@@ -1,4 +1,21 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  Timestamp,
+  increment,
+  addDoc
+} from 'firebase/firestore';
+
 export interface MarketplaceProduct {
   id: string;
   seller_id: string;
@@ -31,6 +48,7 @@ export interface MarketplaceProduct {
   activity_location?: string;
   max_participants?: number;
 }
+
 export interface ProductFormData {
   title: string;
   description: string;
@@ -51,6 +69,7 @@ export interface ProductFormData {
   activity_location?: string;
   max_participants?: number;
 }
+
 export const createProduct = async (
   userId: string,
   userName: string,
@@ -60,6 +79,7 @@ export const createProduct = async (
 ): Promise<string> => {
   try {
     const productRef = doc(collection(db, 'marketplace_products'));
+
     const product: any = {
       seller_id: userId,
       seller_name: userName,
@@ -80,22 +100,28 @@ export const createProduct = async (
       sales_count: 0,
       tags: productData.tags || []
     };
+
     if (productData.digital_file_url) {
       product.digital_file_url = productData.digital_file_url;
     }
+
     if (productData.digital_file_name) {
       product.digital_file_name = productData.digital_file_name;
     }
+
     if (productData.digital_file_size) {
       product.digital_file_size = productData.digital_file_size;
     }
+
     if (productData.stock_quantity !== undefined) {
       product.stock_quantity = productData.stock_quantity;
     }
+
     if (productData.custom_cta_text) {
       product.custom_cta_text = productData.custom_cta_text;
       product.custom_cta_enabled = productData.custom_cta_enabled !== false;
     }
+
     await setDoc(productRef, product);
     console.log('Product created:', productRef.id);
     return productRef.id;
@@ -104,19 +130,23 @@ export const createProduct = async (
     throw error;
   }
 };
+
 export const updateProduct = async (
   productId: string,
   updates: Partial<ProductFormData>
 ): Promise<void> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
+
     const updateData: any = {
       ...updates,
       updated_at: Timestamp.now()
     };
+
     if (updates.price !== undefined) {
       updateData.price = Math.round(updates.price * 100);
     }
+
     await updateDoc(productRef, updateData);
     console.log('Product updated:', productId);
   } catch (error) {
@@ -124,6 +154,7 @@ export const updateProduct = async (
     throw error;
   }
 };
+
 export const publishProduct = async (productId: string): Promise<void> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
@@ -137,6 +168,7 @@ export const publishProduct = async (productId: string): Promise<void> => {
     throw error;
   }
 };
+
 export const archiveProduct = async (productId: string): Promise<void> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
@@ -150,6 +182,7 @@ export const archiveProduct = async (productId: string): Promise<void> => {
     throw error;
   }
 };
+
 export const deleteProduct = async (productId: string): Promise<void> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
@@ -160,10 +193,12 @@ export const deleteProduct = async (productId: string): Promise<void> => {
     throw error;
   }
 };
+
 export const getProduct = async (productId: string): Promise<MarketplaceProduct | null> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
     const productSnap = await getDoc(productRef);
+
     if (productSnap.exists()) {
       return { id: productSnap.id, ...productSnap.data() } as MarketplaceProduct;
     }
@@ -173,6 +208,7 @@ export const getProduct = async (productId: string): Promise<MarketplaceProduct 
     return null;
   }
 };
+
 export const getPublishedProducts = async (
   limitCount: number = 50
 ): Promise<MarketplaceProduct[]> => {
@@ -184,22 +220,27 @@ export const getPublishedProducts = async (
       orderBy('created_at', 'desc'),
       limit(limitCount)
     );
+
     const snapshot = await getDocs(q);
     const products = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as MarketplaceProduct[];
+
     console.log(`✅ Fetched ${products.length} published products from Firestore`);
     return products;
   } catch (error: any) {
     console.error('❌ Error getting published products:', error);
+
     // Check if it's an index error
     if (error?.message?.includes('index')) {
       console.error('🔥 Firestore index required! Deploy with: firebase deploy --only firestore:indexes');
     }
+
     return [];
   }
 };
+
 export const getProductsByCategory = async (
   category: string,
   limitCount: number = 50
@@ -213,6 +254,7 @@ export const getProductsByCategory = async (
       orderBy('created_at', 'desc'),
       limit(limitCount)
     );
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -223,6 +265,7 @@ export const getProductsByCategory = async (
     return [];
   }
 };
+
 export const getMyProducts = async (userId: string): Promise<MarketplaceProduct[]> => {
   try {
     const productsRef = collection(db, 'marketplace_products');
@@ -231,6 +274,7 @@ export const getMyProducts = async (userId: string): Promise<MarketplaceProduct[
       where('seller_id', '==', userId),
       orderBy('created_at', 'desc')
     );
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -241,9 +285,11 @@ export const getMyProducts = async (userId: string): Promise<MarketplaceProduct[
     return [];
   }
 };
+
 export const getSellerProducts = async (sellerId: string): Promise<MarketplaceProduct[]> => {
   return getMyProducts(sellerId);
 };
+
 export const incrementProductViews = async (productId: string): Promise<void> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
@@ -258,6 +304,7 @@ export const incrementProductViews = async (productId: string): Promise<void> =>
     console.error('Error incrementing views:', error);
   }
 };
+
 export const incrementProductSales = async (productId: string): Promise<void> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
@@ -268,6 +315,7 @@ export const incrementProductSales = async (productId: string): Promise<void> =>
     console.error('Error incrementing sales:', error);
   }
 };
+
 export const decrementStock = async (productId: string, quantity: number = 1): Promise<void> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
@@ -278,6 +326,7 @@ export const decrementStock = async (productId: string, quantity: number = 1): P
     console.error('Error decrementing stock:', error);
   }
 };
+
 export const toggleFavorite = async (
   userId: string,
   productId: string
@@ -286,6 +335,7 @@ export const toggleFavorite = async (
     const favoriteId = `${userId}_${productId}`;
     const favoriteRef = doc(db, 'marketplace_favorites', favoriteId);
     const favoriteSnap = await getDoc(favoriteRef);
+
     if (favoriteSnap.exists()) {
       await deleteDoc(favoriteRef);
       const productRef = doc(db, 'marketplace_products', productId);
@@ -310,6 +360,7 @@ export const toggleFavorite = async (
     throw error;
   }
 };
+
 export const isFavorite = async (
   userId: string,
   productId: string
@@ -324,13 +375,17 @@ export const isFavorite = async (
     return false;
   }
 };
+
 export const getFavoriteProducts = async (userId: string): Promise<MarketplaceProduct[]> => {
   try {
     const favoritesRef = collection(db, 'marketplace_favorites');
     const q = query(favoritesRef, where('user_id', '==', userId));
     const snapshot = await getDocs(q);
+
     const productIds = snapshot.docs.map(doc => doc.data().product_id);
+
     if (productIds.length === 0) return [];
+
     const products: MarketplaceProduct[] = [];
     for (const productId of productIds) {
       const product = await getProduct(productId);
@@ -338,12 +393,14 @@ export const getFavoriteProducts = async (userId: string): Promise<MarketplacePr
         products.push(product);
       }
     }
+
     return products;
   } catch (error) {
     console.error('Error getting favorite products:', error);
     return [];
   }
 };
+
 export const searchProducts = async (
   searchTerm: string,
   limitCount: number = 50
@@ -356,11 +413,13 @@ export const searchProducts = async (
       orderBy('created_at', 'desc'),
       limit(limitCount)
     );
+
     const snapshot = await getDocs(q);
     const allProducts = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as MarketplaceProduct[];
+
     const searchLower = searchTerm.toLowerCase();
     return allProducts.filter(product =>
       product.title.toLowerCase().includes(searchLower) ||
@@ -373,6 +432,7 @@ export const searchProducts = async (
     return [];
   }
 };
+
 // Update seller name on all products for a given seller
 export const updateSellerNameOnProducts = async (
   sellerId: string,
@@ -382,6 +442,7 @@ export const updateSellerNameOnProducts = async (
     const productsRef = collection(db, 'marketplace_products');
     const q = query(productsRef, where('seller_id', '==', sellerId));
     const snapshot = await getDocs(q);
+
     let updatedCount = 0;
     const updatePromises = snapshot.docs.map(async (docSnapshot) => {
       const productRef = doc(db, 'marketplace_products', docSnapshot.id);
@@ -391,6 +452,7 @@ export const updateSellerNameOnProducts = async (
       });
       updatedCount++;
     });
+
     await Promise.all(updatePromises);
     console.log(`✅ Updated seller name on ${updatedCount} products`);
     return updatedCount;
@@ -399,6 +461,7 @@ export const updateSellerNameOnProducts = async (
     throw error;
   }
 };
+
 export const linkProductToActivity = async (productId: string, activityId: string): Promise<void> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
@@ -413,6 +476,7 @@ export const linkProductToActivity = async (productId: string, activityId: strin
     throw error;
   }
 };
+
 export const unlinkProductFromActivity = async (productId: string): Promise<void> => {
   try {
     const productRef = doc(db, 'marketplace_products', productId);
@@ -426,10 +490,12 @@ export const unlinkProductFromActivity = async (productId: string): Promise<void
     throw error;
   }
 };
+
 export const getActivityProducts = async (activityId?: string): Promise<MarketplaceProduct[]> => {
   try {
     const productsRef = collection(db, 'marketplace_products');
     let q;
+
     if (activityId) {
       q = query(
         productsRef,
@@ -445,6 +511,7 @@ export const getActivityProducts = async (activityId?: string): Promise<Marketpl
         orderBy('created_at', 'desc')
       );
     }
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => ({
       id: doc.id,
@@ -455,6 +522,7 @@ export const getActivityProducts = async (activityId?: string): Promise<Marketpl
     return [];
   }
 };
+
 export const createActivityProduct = async (
   activityId: string,
   activityName: string,
@@ -470,6 +538,7 @@ export const createActivityProduct = async (
 ): Promise<string> => {
   try {
     const productRef = doc(collection(db, 'marketplace_products'));
+
     const productData: Omit<MarketplaceProduct, 'id'> = {
       seller_id: sellerId,
       seller_name: sellerName,
@@ -494,6 +563,7 @@ export const createActivityProduct = async (
       max_participants: maxParticipants,
       tags: ['activity', 'event']
     };
+
     await setDoc(productRef, productData);
     return productRef.id;
   } catch (error) {

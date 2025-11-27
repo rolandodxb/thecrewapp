@@ -1,4 +1,5 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { courseExams } from '../data/examData';
 import { Exam } from '../services/examService';
 
@@ -8,6 +9,7 @@ export async function initializeExams(): Promise<void> {
 
     for (const examData of courseExams) {
       const examId = examData.courseId;
+      const examRef = doc(db, 'exams', examId);
 
       const questions = examData.questions.map((q, index) => ({
         id: q.id,
@@ -32,11 +34,7 @@ export async function initializeExams(): Promise<void> {
         updatedAt: new Date().toISOString(),
       };
 
-      const { error } = await supabase
-        .from('exams')
-        .upsert(exam, { onConflict: 'id' });
-
-      if (error) throw error;
+      await setDoc(examRef, exam);
       console.log(`✅ Exam created for ${examData.courseName}`);
     }
 

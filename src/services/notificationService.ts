@@ -1,4 +1,20 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  updateDoc,
+  doc,
+  writeBatch,
+  Timestamp,
+  getDocs,
+  limit,
+  getDoc,
+} from 'firebase/firestore';
+
 export type NotificationType =
   | 'system_update'
   | 'new_feature'
@@ -20,6 +36,7 @@ export type NotificationType =
   | 'system_announcement'
   | 'feature_shutdown'
   | 'feature_restore';
+
 export interface Notification {
   id?: string;
   userId: string;
@@ -41,6 +58,7 @@ export interface Notification {
   };
   createdAt: Timestamp;
 }
+
 export async function createNotification(notification: Omit<Notification, 'id' | 'createdAt'>) {
   try {
     const notificationsRef = collection(db, 'notifications');
@@ -52,14 +70,17 @@ export async function createNotification(notification: Omit<Notification, 'id' |
     console.error('Error creating notification:', error);
   }
 }
+
 export async function createNotificationForAllUsers(
   notification: Omit<Notification, 'id' | 'userId' | 'createdAt'>
 ) {
   try {
     const usersRef = collection(db, 'users');
     const usersSnapshot = await getDocs(usersRef);
+
     const batch = writeBatch(db);
     const notificationsRef = collection(db, 'notifications');
+
     usersSnapshot.docs.forEach((userDoc) => {
       const notificationDocRef = doc(notificationsRef);
       batch.set(notificationDocRef, {
@@ -68,12 +89,14 @@ export async function createNotificationForAllUsers(
         createdAt: Timestamp.now(),
       });
     });
+
     await batch.commit();
     console.log(`Created notification for ${usersSnapshot.docs.length} users`);
   } catch (error) {
     console.error('Error creating notifications for all users:', error);
   }
 }
+
 export function subscribeToUserNotifications(
   userId: string,
   callback: (notifications: Notification[]) => void
@@ -84,6 +107,7 @@ export function subscribeToUserNotifications(
     where('userId', '==', userId),
     orderBy('createdAt', 'desc')
   );
+
   return onSnapshot(q, (snapshot) => {
     const notifications: Notification[] = snapshot.docs.map((doc) => ({
       id: doc.id,
@@ -92,6 +116,7 @@ export function subscribeToUserNotifications(
     callback(notifications);
   });
 }
+
 export async function markNotificationAsRead(notificationId: string) {
   try {
     const notificationRef = doc(db, 'notifications', notificationId);
@@ -100,22 +125,27 @@ export async function markNotificationAsRead(notificationId: string) {
     console.error('Error marking notification as read:', error);
   }
 }
+
 export async function markAllNotificationsAsRead(userId: string) {
   try {
     const notificationsRef = collection(db, 'notifications');
     const q = query(notificationsRef, where('userId', '==', userId));
+
     const snapshot = await getDocs(q);
     const batch = writeBatch(db);
+
     snapshot.docs.forEach((docSnap) => {
       if (!docSnap.data().read) {
         batch.update(docSnap.ref, { read: true });
       }
     });
+
     await batch.commit();
   } catch (error) {
     console.error('Error marking all notifications as read:', error);
   }
 }
+
 export async function notifySystemUpdate(title: string, message: string, priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium') {
   await createNotificationForAllUsers({
     type: 'system_update',
@@ -125,6 +155,7 @@ export async function notifySystemUpdate(title: string, message: string, priorit
     priority,
   });
 }
+
 export async function notifyNewFeature(title: string, message: string) {
   await createNotificationForAllUsers({
     type: 'new_feature',
@@ -134,6 +165,7 @@ export async function notifyNewFeature(title: string, message: string) {
     priority: 'high',
   });
 }
+
 export async function notifySystemAnnouncement(announcementTitle: string, announcementMessage: string, priority: 'low' | 'medium' | 'high' | 'urgent' = 'high') {
   await createNotificationForAllUsers({
     type: 'system_announcement',
@@ -143,6 +175,7 @@ export async function notifySystemAnnouncement(announcementTitle: string, announ
     priority,
   });
 }
+
 export async function notifyFeatureShutdown(featureName: string, reason: string) {
   await createNotificationForAllUsers({
     type: 'feature_shutdown',
@@ -153,6 +186,7 @@ export async function notifyFeatureShutdown(featureName: string, reason: string)
     metadata: { featureName },
   });
 }
+
 export async function notifyFeatureRestore(featureName: string) {
   await createNotificationForAllUsers({
     type: 'feature_restore',
@@ -163,6 +197,7 @@ export async function notifyFeatureRestore(featureName: string) {
     metadata: { featureName },
   });
 }
+
 export async function notifyBugReportComment(
   userId: string,
   bugReportId: string,
@@ -180,6 +215,7 @@ export async function notifyBugReportComment(
     metadata: { bugReportId },
   });
 }
+
 export async function notifyBugReportStatus(
   userId: string,
   bugReportId: string,
@@ -197,6 +233,7 @@ export async function notifyBugReportStatus(
     metadata: { bugReportId, status: newStatus },
   });
 }
+
 export async function notifyCommunityMessage(
   userId: string,
   senderName: string,
@@ -211,6 +248,7 @@ export async function notifyCommunityMessage(
     actionUrl: '/chat?conversation=publicRoom',
   });
 }
+
 export async function notifyPrivateMessage(
   userId: string,
   senderName: string,
@@ -228,6 +266,7 @@ export async function notifyPrivateMessage(
     metadata: { conversationId },
   });
 }
+
 export async function notifyGroupMessage(
   userId: string,
   groupName: string,
@@ -245,6 +284,7 @@ export async function notifyGroupMessage(
     metadata: { conversationId },
   });
 }
+
 export async function notifySupportMessage(userId: string, message: string) {
   await createNotification({
     userId,
@@ -256,6 +296,7 @@ export async function notifySupportMessage(userId: string, message: string) {
     actionUrl: '/support-chat',
   });
 }
+
 export async function notifyPointsAwarded(
   userId: string,
   points: number,
@@ -270,6 +311,7 @@ export async function notifyPointsAwarded(
     metadata: { points },
   });
 }
+
 export async function notifyDailyLogin(userId: string, streak: number) {
   await createNotification({
     userId,
@@ -280,6 +322,7 @@ export async function notifyDailyLogin(userId: string, streak: number) {
     actionUrl: '/my-progress',
   });
 }
+
 export async function notifyCourseCompletion(
   userId: string,
   courseTitle: string,
@@ -296,6 +339,7 @@ export async function notifyCourseCompletion(
     metadata: { points },
   });
 }
+
 export async function notifyNewCourse(courseTitle: string, courseId: string) {
   await createNotificationForAllUsers({
     type: 'new_course',
@@ -307,6 +351,7 @@ export async function notifyNewCourse(courseTitle: string, courseId: string) {
     metadata: { courseId },
   });
 }
+
 export async function notifyCourseUpdate(
   courseTitle: string,
   courseId: string,
@@ -321,6 +366,7 @@ export async function notifyCourseUpdate(
     metadata: { courseId },
   });
 }
+
 export async function notifyExamReminder(
   userId: string,
   examTitle: string,
@@ -336,6 +382,7 @@ export async function notifyExamReminder(
     metadata: { courseId },
   });
 }
+
 export async function notifyLearningReminder(
   userId: string,
   courseTitle: string,
@@ -351,6 +398,7 @@ export async function notifyLearningReminder(
     metadata: { courseId },
   });
 }
+
 export async function notifyAchievement(
   userId: string,
   achievementTitle: string,
@@ -366,6 +414,7 @@ export async function notifyAchievement(
     actionUrl: '/profile',
   });
 }
+
 export async function getAllActiveBugReports() {
   try {
     const bugReportsRef = collection(db, 'bugReports');
@@ -382,10 +431,12 @@ export async function getAllActiveBugReports() {
     return [];
   }
 }
+
 export async function getCurrentSystemAnnouncements() {
   try {
     const systemControlRef = doc(db, 'systemControl', 'settings');
     const snapshot = await getDocs(query(collection(db, 'systemControl')));
+
     const announcements: any[] = [];
     snapshot.docs.forEach((doc) => {
       const data = doc.data();
@@ -396,21 +447,26 @@ export async function getCurrentSystemAnnouncements() {
         });
       }
     });
+
     return announcements;
   } catch (error) {
     console.error('Error fetching system announcements:', error);
     return [];
   }
 }
+
 export async function getActiveFeatureShutdowns() {
   try {
     const shutdownDocRef = doc(db, 'systemSettings', 'featuresShutdown');
     const snapshot = await getDoc(shutdownDocRef);
+    
     if (!snapshot.exists()) {
       return [];
     }
+    
     const shutdownData = snapshot.data();
     const activeShutdowns = [];
+    
     // Filter active shutdowns from the document data
     for (const [featureName, shutdownInfo] of Object.entries(shutdownData)) {
       if (shutdownInfo && typeof shutdownInfo === 'object' && (shutdownInfo.isActive || shutdownInfo.isShutdown)) {
@@ -421,6 +477,7 @@ export async function getActiveFeatureShutdowns() {
         });
       }
     }
+    
     return activeShutdowns;
   } catch (error) {
     console.error('Error fetching feature shutdowns:', error);

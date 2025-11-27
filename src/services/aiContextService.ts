@@ -1,4 +1,6 @@
-import { supabase } from '../lib/auth';
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+
 export interface UserContext {
   userId: string;
   role: 'student' | 'coach' | 'mentor' | 'governor' | 'moderator';
@@ -51,24 +53,30 @@ export interface UserContext {
     engagement?: number;
   };
 }
+
 class AIContextService {
   private contextCache: Map<string, { data: UserContext; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000;
+
   async getUserContext(userId: string): Promise<UserContext> {
     const cached = this.contextCache.get(userId);
     if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
       return cached.data;
     }
+
     const context = await this.fetchUserContext(userId);
     this.contextCache.set(userId, { data: context, timestamp: Date.now() });
     return context;
   }
+
   private async fetchUserContext(userId: string): Promise<UserContext> {
     const userDoc = await getDoc(doc(db, 'users', userId));
     const userData = userDoc.data();
+
     if (!userData) {
       throw new Error('User not found');
     }
+
     const context: UserContext = {
       userId,
       role: userData.role || 'student',
@@ -85,11 +93,14 @@ class AIContextService {
       community: await this.getCommunityData(userId),
       modules: await this.getModuleData(userId),
     };
+
     if (context.role === 'coach' || context.role === 'mentor') {
       context.analytics = await this.getAnalyticsData(userId);
     }
+
     return context;
   }
+
   private async getProgressData(userId: string) {
     try {
       const enrollmentsQuery = query(
@@ -97,24 +108,29 @@ class AIContextService {
         where('userId', '==', userId)
       );
       const enrollmentsSnap = await getDocs(enrollmentsQuery);
+
       const progressQuery = query(
         collection(db, 'user_module_progress'),
         where('userId', '==', userId)
       );
       const progressSnap = await getDocs(progressQuery);
+
       let completedModules = 0;
       progressSnap.forEach((doc) => {
         const data = doc.data();
         if (data.completed) completedModules++;
       });
+
       const pointsDoc = await getDoc(doc(db, 'user_points', userId));
       const totalPoints = pointsDoc.exists() ? pointsDoc.data().total_points || 0 : 0;
+
       const badgesQuery = query(
         collection(db, 'user_badges'),
         where('userId', '==', userId)
       );
       const badgesSnap = await getDocs(badgesQuery);
       const badges = badgesSnap.docs.map((doc) => doc.data().badge_type || doc.data().type);
+
       return {
         enrolledCourses: enrollmentsSnap.size,
         completedModules,
@@ -133,6 +149,7 @@ class AIContextService {
       };
     }
   }
+
   private async getMarketplaceData(userId: string) {
     try {
       const purchasesQuery = query(
@@ -141,6 +158,7 @@ class AIContextService {
         where('status', '==', 'completed')
       );
       const purchasesSnap = await getDocs(purchasesQuery);
+
       const purchasedProducts = purchasesSnap.docs.map((doc) => {
         const data = doc.data();
         return {
@@ -150,12 +168,14 @@ class AIContextService {
           purchaseDate: data.createdAt?.toDate() || new Date(),
         };
       });
+
       const salesQuery = query(
         collection(db, 'orders'),
         where('sellerId', '==', userId),
         where('status', '==', 'completed')
       );
       const salesSnap = await getDocs(salesQuery);
+
       const soldProducts = salesSnap.docs.map((doc) => {
         const data = doc.data();
         return {
@@ -164,12 +184,14 @@ class AIContextService {
           revenue: data.amount || 0,
         };
       });
+
       return { purchasedProducts, soldProducts };
     } catch (error) {
       console.error('Error fetching marketplace data:', error);
       return { purchasedProducts: [], soldProducts: [] };
     }
   }
+
   private async getCommunityData(userId: string) {
     try {
       const postsQuery = query(
@@ -177,13 +199,16 @@ class AIContextService {
         where('userId', '==', userId)
       );
       const postsSnap = await getDocs(postsQuery);
+
       let commentsCount = 0;
       let likesReceived = 0;
+
       postsSnap.forEach((doc) => {
         const data = doc.data();
         if (data.commentsCount) commentsCount += data.commentsCount;
         if (data.likes) likesReceived += data.likes.length;
       });
+
       const recentQuery = query(
         collection(db, 'communityPosts'),
         where('userId', '==', userId),
@@ -191,6 +216,7 @@ class AIContextService {
         limit(5)
       );
       const recentSnap = await getDocs(recentQuery);
+
       const recentActivity = recentSnap.docs.map((doc) => {
         const data = doc.data();
         return {
@@ -199,6 +225,7 @@ class AIContextService {
           timestamp: data.createdAt?.toDate() || new Date(),
         };
       });
+
       return {
         postsCount: postsSnap.size,
         commentsCount,
@@ -215,6 +242,7 @@ class AIContextService {
       };
     }
   }
+
   private async getModuleData(userId: string) {
     try {
       const createdQuery = query(
@@ -222,17 +250,20 @@ class AIContextService {
         where('createdBy', '==', userId)
       );
       const createdSnap = await getDocs(createdQuery);
+
       const enrolledQuery = query(
         collection(db, 'course_enrollments'),
         where('userId', '==', userId)
       );
       const enrolledSnap = await getDocs(enrolledQuery);
+
       const completedQuery = query(
         collection(db, 'user_module_progress'),
         where('userId', '==', userId)
       );
       const completedSnap = await getDocs(completedQuery);
       const completedCount = completedSnap.docs.filter(doc => doc.data().completed === true).length;
+
       return {
         created: createdSnap.size,
         enrolled: enrolledSnap.size,
@@ -243,6 +274,7 @@ class AIContextService {
       return { created: 0, enrolled: 0, completed: 0 };
     }
   }
+
   private async getAnalyticsData(userId: string) {
     try {
       const studentsQuery = query(
@@ -250,16 +282,19 @@ class AIContextService {
         where('coachId', '==', userId)
       );
       const studentsSnap = await getDocs(studentsQuery);
+
       const revenueQuery = query(
         collection(db, 'orders'),
         where('sellerId', '==', userId),
         where('status', '==', 'completed')
       );
       const revenueSnap = await getDocs(revenueQuery);
+
       let totalRevenue = 0;
       revenueSnap.forEach((doc) => {
         totalRevenue += doc.data().amount || 0;
       });
+
       return {
         studentCount: studentsSnap.size,
         revenue: totalRevenue,
@@ -270,6 +305,7 @@ class AIContextService {
       return { studentCount: 0, revenue: 0, engagement: 0 };
     }
   }
+
   private calculateLevel(points: number): string {
     if (points < 100) return 'Beginner';
     if (points < 500) return 'Intermediate';
@@ -277,12 +313,14 @@ class AIContextService {
     if (points < 2000) return 'Expert';
     return 'Master';
   }
+
   subscribeToUserContext(userId: string, callback: (context: UserContext) => void) {
     return onSnapshot(doc(db, 'users', userId), async () => {
       const context = await this.getUserContext(userId);
       callback(context);
     });
   }
+
   clearCache(userId?: string) {
     if (userId) {
       this.contextCache.delete(userId);
@@ -291,4 +329,5 @@ class AIContextService {
     }
   }
 }
+
 export const aiContextService = new AIContextService();

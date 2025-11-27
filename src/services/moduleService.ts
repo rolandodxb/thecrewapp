@@ -1,4 +1,18 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  Timestamp
+} from 'firebase/firestore';
+
 export interface ModuleLesson {
   id: string;
   title: string;
@@ -7,6 +21,7 @@ export interface ModuleLesson {
   order: number;
   isIntro: boolean;
 }
+
 export interface Module {
   id: string;
   name: string;
@@ -20,6 +35,7 @@ export interface Module {
   created_at: string;
   updated_at: string;
 }
+
 export interface UserModuleProgress {
   user_id: string;
   module_id: string;
@@ -32,17 +48,20 @@ export interface UserModuleProgress {
   unlocked: boolean;
   unlocked_at?: string;
 }
+
 export const createModule = async (moduleData: Omit<Module, 'id' | 'created_at' | 'updated_at'>): Promise<string> => {
   try {
     console.log('Creating module in Firestore...');
     const moduleRef = doc(collection(db, 'modules'));
     const now = new Date().toISOString();
+
     const newModule: Module = {
       id: moduleRef.id,
       ...moduleData,
       created_at: now,
       updated_at: now
     };
+
     console.log('Module data prepared:', { id: newModule.id, name: newModule.name });
     await setDoc(moduleRef, newModule);
     console.log('Module saved to Firestore successfully');
@@ -52,6 +71,7 @@ export const createModule = async (moduleData: Omit<Module, 'id' | 'created_at' 
     throw error;
   }
 };
+
 export const updateModule = async (moduleId: string, updates: Partial<Module>): Promise<void> => {
   const moduleRef = doc(db, 'modules', moduleId);
   await updateDoc(moduleRef, {
@@ -59,15 +79,18 @@ export const updateModule = async (moduleId: string, updates: Partial<Module>): 
     updated_at: new Date().toISOString()
   });
 };
+
 export const deleteModule = async (moduleId: string): Promise<void> => {
   const moduleRef = doc(db, 'modules', moduleId);
   await deleteDoc(moduleRef);
 };
+
 export const getModule = async (moduleId: string): Promise<Module | null> => {
   const moduleRef = doc(db, 'modules', moduleId);
   const moduleSnap = await getDoc(moduleRef);
   return moduleSnap.exists() ? moduleSnap.data() as Module : null;
 };
+
 export const getModulesByCategory = async (category: string): Promise<Module[]> => {
   const modulesRef = collection(db, 'modules');
   const q = query(
@@ -78,10 +101,12 @@ export const getModulesByCategory = async (category: string): Promise<Module[]> 
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => doc.data() as Module);
 };
+
 export const getAllModules = async (): Promise<Module[]> => {
   try {
     const modulesRef = collection(db, 'modules');
     console.log('Fetching modules from Firestore...');
+
     // Try with composite index first
     try {
       const q = query(modulesRef, orderBy('category', 'asc'), orderBy('order', 'asc'));
@@ -94,6 +119,7 @@ export const getAllModules = async (): Promise<Module[]> => {
       const snapshot = await getDocs(modulesRef);
       console.log('Modules fetched without index:', snapshot.size);
       const modules = snapshot.docs.map(doc => doc.data() as Module);
+
       // Sort in memory
       return modules.sort((a, b) => {
         if (a.category !== b.category) {
@@ -107,16 +133,20 @@ export const getAllModules = async (): Promise<Module[]> => {
     throw error;
   }
 };
+
 export const getVisibleRootModules = async (): Promise<Module[]> => {
   try {
     const modulesRef = collection(db, 'modules');
     console.log('Fetching visible root modules (order = 1)...');
+
     const snapshot = await getDocs(modulesRef);
     const modules = snapshot.docs.map(doc => doc.data() as Module);
+
     // Filter for visible modules with order = 1
     const rootModules = modules.filter(module =>
       module.visible === true && module.order === 1
     );
+
     console.log('Visible root modules found:', rootModules.length);
     return rootModules.sort((a, b) => a.category.localeCompare(b.category));
   } catch (error) {
@@ -124,13 +154,16 @@ export const getVisibleRootModules = async (): Promise<Module[]> => {
     throw error;
   }
 };
+
 export const getUserModuleProgress = async (userId: string, moduleId: string): Promise<UserModuleProgress | null> => {
   const progressRef = doc(db, 'user_module_progress', `${userId}_${moduleId}`);
   const progressSnap = await getDoc(progressRef);
   return progressSnap.exists() ? progressSnap.data() as UserModuleProgress : null;
 };
+
 export const initializeUserModuleProgress = async (userId: string, moduleId: string, isFirstModule: boolean = false): Promise<void> => {
   const progressRef = doc(db, 'user_module_progress', `${userId}_${moduleId}`);
+
   const progress: UserModuleProgress = {
     user_id: userId,
     module_id: moduleId,
@@ -141,11 +174,14 @@ export const initializeUserModuleProgress = async (userId: string, moduleId: str
     unlocked: isFirstModule,
     unlocked_at: isFirstModule ? new Date().toISOString() : undefined
   };
+
   await setDoc(progressRef, progress);
 };
+
 export const markCourseComplete = async (userId: string, moduleId: string, courseId: string): Promise<void> => {
   const progressRef = doc(db, 'user_module_progress', `${userId}_${moduleId}`);
   const progressSnap = await getDoc(progressRef);
+
   if (progressSnap.exists()) {
     const progress = progressSnap.data() as UserModuleProgress;
     if (!progress.completed_courses.includes(courseId)) {
@@ -157,6 +193,7 @@ export const markCourseComplete = async (userId: string, moduleId: string, cours
     await updateDoc(progressRef, { completed_courses: [courseId] });
   }
 };
+
 export const updateQuizResult = async (
   userId: string,
   moduleId: string,
@@ -165,6 +202,7 @@ export const updateQuizResult = async (
 ): Promise<void> => {
   const progressRef = doc(db, 'user_module_progress', `${userId}_${moduleId}`);
   const progressSnap = await getDoc(progressRef);
+
   if (progressSnap.exists()) {
     const progress = progressSnap.data() as UserModuleProgress;
     await updateDoc(progressRef, {
@@ -173,19 +211,24 @@ export const updateQuizResult = async (
       quiz_attempts: progress.quiz_attempts + 1,
       last_attempt_at: new Date().toISOString()
     });
+
     if (passed) {
       await unlockNextModule(userId, moduleId);
     }
   }
 };
+
 export const unlockNextModule = async (userId: string, currentModuleId: string): Promise<void> => {
   const currentModule = await getModule(currentModuleId);
   if (!currentModule) return;
+
   const allModules = await getModulesByCategory(currentModule.category);
   const currentIndex = allModules.findIndex(m => m.id === currentModuleId);
+
   if (currentIndex !== -1 && currentIndex < allModules.length - 1) {
     const nextModule = allModules[currentIndex + 1];
     const nextProgressRef = doc(db, 'user_module_progress', `${userId}_${nextModule.id}`);
+
     const nextProgressSnap = await getDoc(nextProgressRef);
     if (nextProgressSnap.exists()) {
       await updateDoc(nextProgressRef, {
@@ -205,9 +248,11 @@ export const unlockNextModule = async (userId: string, currentModuleId: string):
     }
   }
 };
+
 export const getUserProgressForCategory = async (userId: string, category: string): Promise<Map<string, UserModuleProgress>> => {
   const modules = await getModulesByCategory(category);
   const progressMap = new Map<string, UserModuleProgress>();
+
   for (const module of modules) {
     const progress = await getUserModuleProgress(userId, module.id);
     if (progress) {
@@ -221,10 +266,13 @@ export const getUserProgressForCategory = async (userId: string, category: strin
       }
     }
   }
+
   return progressMap;
 };
+
 export const isModuleUnlocked = async (userId: string, moduleId: string): Promise<boolean> => {
   const progress = await getUserModuleProgress(userId, moduleId);
+
   if (!progress) {
     const module = await getModule(moduleId);
     if (module?.order === 1) {
@@ -233,16 +281,21 @@ export const isModuleUnlocked = async (userId: string, moduleId: string): Promis
     }
     return false;
   }
+
   return progress.unlocked;
 };
+
 export const canTakeModuleQuiz = async (userId: string, moduleId: string, coursesInModule: string[]): Promise<boolean> => {
   const progress = await getUserModuleProgress(userId, moduleId);
   if (!progress) return false;
+
   return coursesInModule.every(courseId => progress.completed_courses.includes(courseId));
 };
+
 export const markLessonComplete = async (userId: string, moduleId: string, lessonId: string): Promise<void> => {
   const progressRef = doc(db, 'user_module_progress', `${userId}_${moduleId}`);
   const progressSnap = await getDoc(progressRef);
+
   if (progressSnap.exists()) {
     const progress = progressSnap.data() as UserModuleProgress;
     if (!progress.completed_lessons.includes(lessonId)) {
@@ -254,20 +307,28 @@ export const markLessonComplete = async (userId: string, moduleId: string, lesso
     await updateDoc(progressRef, { completed_lessons: [lessonId] });
   }
 };
+
 export const isLessonUnlocked = async (userId: string, moduleId: string, module: Module, lessonId: string): Promise<boolean> => {
   const lesson = module.lessons.find(l => l.id === lessonId);
   if (!lesson) return false;
+
   if (lesson.isIntro) return true;
+
   const progress = await getUserModuleProgress(userId, moduleId);
   if (!progress) return false;
+
   const prevLesson = module.lessons.find(l => l.order === lesson.order - 1);
   if (!prevLesson) return false;
+
   return progress.completed_lessons.includes(prevLesson.id) && progress.quiz_passed;
 };
+
 export const canWatchNextLesson = async (userId: string, moduleId: string, currentLessonId: string, module: Module): Promise<boolean> => {
   const progress = await getUserModuleProgress(userId, moduleId);
   if (!progress) return false;
+
   const currentLesson = module.lessons.find(l => l.id === currentLessonId);
   if (!currentLesson || currentLesson.isIntro) return true;
+
   return progress.quiz_passed;
 };

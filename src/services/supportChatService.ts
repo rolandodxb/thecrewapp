@@ -1,6 +1,23 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  addDoc,
+  updateDoc,
+  serverTimestamp,
+  onSnapshot,
+  Timestamp
+} from 'firebase/firestore';
+
 export type Department = 'general' | 'technical' | 'billing' | 'courses' | 'recruitment' | 'other';
 export type Topic = 'account' | 'payment' | 'course_access' | 'bug_report' | 'feature_request' | 'complaint' | 'other';
+
 export interface SupportTicket {
   id: string;
   userId: string;
@@ -23,6 +40,7 @@ export interface SupportTicket {
   escalatedToName?: string;
   participants: Array<{ id: string; name: string; role: string; joinedAt: any }>;
 }
+
 export interface SupportMessage {
   id: string;
   ticketId: string;
@@ -34,6 +52,7 @@ export interface SupportMessage {
   read: boolean;
   isSystemMessage?: boolean;
 }
+
 export const createSupportTicket = async (
   userId: string,
   userName: string,
@@ -45,10 +64,14 @@ export const createSupportTicket = async (
 ): Promise<string> => {
   try {
     console.log('Creating support ticket with data:', { userId, userName, userEmail, subject });
+
     const ticketRef = doc(collection(db, 'supportTickets'));
     const ticketId = ticketRef.id;
+
     console.log('Generated ticket ID:', ticketId);
+
     const now = Timestamp.now();
+
     const ticketData: Omit<SupportTicket, 'id'> = {
       userId,
       userName,
@@ -65,9 +88,11 @@ export const createSupportTicket = async (
       unreadByStaff: 1,
       participants: [{ id: userId, name: userName, role: 'student', joinedAt: now }],
     };
+
     console.log('Writing ticket to Firestore...');
     await setDoc(ticketRef, ticketData);
     console.log('Ticket created successfully');
+
     console.log('Adding initial message...');
     await addDoc(collection(db, 'supportTickets', ticketId, 'messages'), {
       ticketId,
@@ -79,6 +104,7 @@ export const createSupportTicket = async (
       read: false,
     });
     console.log('Initial message added successfully');
+
     return ticketId;
   } catch (error: any) {
     console.error('Error creating support ticket:', error);
@@ -87,6 +113,7 @@ export const createSupportTicket = async (
     throw error;
   }
 };
+
 export const sendSupportMessage = async (
   ticketId: string,
   senderId: string,
@@ -104,21 +131,25 @@ export const sendSupportMessage = async (
       timestamp: serverTimestamp(),
       read: false,
     });
+
     const updateData: any = {
       lastMessageAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
+
     if (senderRole === 'user') {
       updateData.unreadByGovernor = (await getUnreadCount(ticketId, 'governor')) + 1;
     } else {
       updateData.unreadByUser = (await getUnreadCount(ticketId, 'user')) + 1;
     }
+
     await updateDoc(doc(db, 'supportTickets', ticketId), updateData);
   } catch (error) {
     console.error('Error sending support message:', error);
     throw error;
   }
 };
+
 const getUnreadCount = async (ticketId: string, role: 'user' | 'governor'): Promise<number> => {
   try {
     const ticketDoc = await getDoc(doc(db, 'supportTickets', ticketId));
@@ -129,6 +160,7 @@ const getUnreadCount = async (ticketId: string, role: 'user' | 'governor'): Prom
     return 0;
   }
 };
+
 export const markMessagesAsRead = async (ticketId: string, role: 'user' | 'governor'): Promise<void> => {
   try {
     const updateData: any = {};
@@ -137,11 +169,13 @@ export const markMessagesAsRead = async (ticketId: string, role: 'user' | 'gover
     } else {
       updateData.unreadByGovernor = 0;
     }
+
     await updateDoc(doc(db, 'supportTickets', ticketId), updateData);
   } catch (error) {
     console.error('Error marking messages as read:', error);
   }
 };
+
 export const getUserSupportTickets = async (userId: string): Promise<SupportTicket[]> => {
   try {
     const q = query(
@@ -149,6 +183,7 @@ export const getUserSupportTickets = async (userId: string): Promise<SupportTick
       where('userId', '==', userId),
       orderBy('lastMessageAt', 'desc')
     );
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -159,6 +194,7 @@ export const getUserSupportTickets = async (userId: string): Promise<SupportTick
     return [];
   }
 };
+
 export const escalateTicket = async (
   ticketId: string,
   escalatedToId: string,
@@ -174,6 +210,7 @@ export const escalateTicket = async (
       status: 'in_progress',
       updatedAt: serverTimestamp(),
     });
+
     await addDoc(collection(db, 'supportTickets', ticketId, 'messages'), {
       ticketId,
       senderId: 'system',
@@ -184,10 +221,12 @@ export const escalateTicket = async (
       read: false,
       isSystemMessage: true,
     });
+
     const ticketDoc = await getDoc(doc(db, 'supportTickets', ticketId));
     if (ticketDoc.exists()) {
       const currentParticipants = ticketDoc.data().participants || [];
       const alreadyParticipant = currentParticipants.some((p: any) => p.id === escalatedToId);
+
       if (!alreadyParticipant) {
         await updateDoc(doc(db, 'supportTickets', ticketId), {
           participants: [
@@ -202,6 +241,7 @@ export const escalateTicket = async (
     throw error;
   }
 };
+
 export const assignTicket = async (
   ticketId: string,
   assignedToId: string,
@@ -216,6 +256,7 @@ export const assignTicket = async (
       status: 'in_progress',
       updatedAt: serverTimestamp(),
     });
+
     await addDoc(collection(db, 'supportTickets', ticketId, 'messages'), {
       ticketId,
       senderId: 'system',
@@ -226,10 +267,12 @@ export const assignTicket = async (
       read: false,
       isSystemMessage: true,
     });
+
     const ticketDoc = await getDoc(doc(db, 'supportTickets', ticketId));
     if (ticketDoc.exists()) {
       const currentParticipants = ticketDoc.data().participants || [];
       const alreadyParticipant = currentParticipants.some((p: any) => p.id === assignedToId);
+
       if (!alreadyParticipant) {
         await updateDoc(doc(db, 'supportTickets', ticketId), {
           participants: [
@@ -244,12 +287,14 @@ export const assignTicket = async (
     throw error;
   }
 };
+
 export const getAllSupportTickets = async (): Promise<SupportTicket[]> => {
   try {
     const q = query(
       collection(db, 'supportTickets'),
       orderBy('lastMessageAt', 'desc')
     );
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -260,6 +305,7 @@ export const getAllSupportTickets = async (): Promise<SupportTicket[]> => {
     return [];
   }
 };
+
 export const updateTicketStatus = async (
   ticketId: string,
   status: SupportTicket['status']
@@ -274,6 +320,7 @@ export const updateTicketStatus = async (
     throw error;
   }
 };
+
 export const subscribeToTicketMessages = (
   ticketId: string,
   callback: (messages: SupportMessage[]) => void
@@ -282,6 +329,7 @@ export const subscribeToTicketMessages = (
     collection(db, 'supportTickets', ticketId, 'messages'),
     orderBy('timestamp', 'asc')
   );
+
   return onSnapshot(q, (snapshot) => {
     const messages = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -290,6 +338,7 @@ export const subscribeToTicketMessages = (
     callback(messages);
   });
 };
+
 export const subscribeToUserTickets = (
   userId: string,
   callback: (tickets: SupportTicket[]) => void
@@ -299,6 +348,7 @@ export const subscribeToUserTickets = (
     where('userId', '==', userId),
     orderBy('lastMessageAt', 'desc')
   );
+
   return onSnapshot(q, (snapshot) => {
     const tickets = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -307,6 +357,7 @@ export const subscribeToUserTickets = (
     callback(tickets);
   });
 };
+
 export const subscribeToAllTickets = (
   callback: (tickets: SupportTicket[]) => void
 ): (() => void) => {
@@ -314,6 +365,7 @@ export const subscribeToAllTickets = (
     collection(db, 'supportTickets'),
     orderBy('lastMessageAt', 'desc')
   );
+
   return onSnapshot(q, (snapshot) => {
     const tickets = snapshot.docs.map(doc => ({
       id: doc.id,

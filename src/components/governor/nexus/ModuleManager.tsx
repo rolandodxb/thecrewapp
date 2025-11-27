@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FolderPlus, Edit2, Save, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { supabase } from '../../../lib/auth';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../../lib/firebase';
 import {
   Module,
   getAllModules
 } from '../../../services/moduleService';
+
 interface EditFormData {
   name: string;
   description: string;
@@ -13,6 +15,7 @@ interface EditFormData {
   visible: boolean;
   quiz_id?: string;
 }
+
 export default function ModuleManager() {
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,9 +29,11 @@ export default function ModuleManager() {
     quiz_id: ''
   });
   const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     loadModules();
   }, []);
+
   const loadModules = async () => {
     setLoading(true);
     try {
@@ -41,6 +46,7 @@ export default function ModuleManager() {
       setLoading(false);
     }
   };
+
   const startEdit = (module: Module, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingId(module.id!);
@@ -52,6 +58,7 @@ export default function ModuleManager() {
       quiz_id: module.quiz_id || ''
     });
   };
+
   const cancelEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingId(null);
@@ -63,23 +70,21 @@ export default function ModuleManager() {
       quiz_id: ''
     });
   };
+
   const saveEdit = async (moduleId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('main_modules')
-        .update({
-          name: editForm.name,
-          description: editForm.description,
-          order: editForm.order,
-          visible: editForm.visible,
-          quiz_id: editForm.quiz_id || null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', moduleId);
+      const moduleRef = doc(db, 'main_modules', moduleId);
+      await updateDoc(moduleRef, {
+        name: editForm.name,
+        description: editForm.description,
+        order: editForm.order,
+        visible: editForm.visible,
+        quiz_id: editForm.quiz_id || null,
+        updatedAt: new Date()
+      });
 
-      if (error) throw error;
       await loadModules();
       setEditingId(null);
     } catch (error) {
@@ -89,6 +94,7 @@ export default function ModuleManager() {
       setSaving(false);
     }
   };
+
   const groupedModules = modules.reduce((acc, module) => {
     if (!acc[module.category]) {
       acc[module.category] = [];
@@ -96,6 +102,7 @@ export default function ModuleManager() {
     acc[module.category].push(module);
     return acc;
   }, {} as Record<string, Module[]>);
+
   const renderModuleCard = (module: Module) => (
     <div key={module.id} className="glass-light border border-gray-300 rounded-xl overflow-hidden">
       <div className="p-4 hover:bg-gray-50 transition">
@@ -141,6 +148,7 @@ export default function ModuleManager() {
           </button>
         </div>
       </div>
+
       <AnimatePresence>
         {editingId === module.id && (
           <motion.div
@@ -161,6 +169,7 @@ export default function ModuleManager() {
                   onClick={(e) => e.stopPropagation()}
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Description</label>
                 <textarea
@@ -171,6 +180,7 @@ export default function ModuleManager() {
                   onClick={(e) => e.stopPropagation()}
                 />
               </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Order</label>
@@ -182,6 +192,7 @@ export default function ModuleManager() {
                     onClick={(e) => e.stopPropagation()}
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Quiz ID (optional)</label>
                   <input
@@ -194,6 +205,7 @@ export default function ModuleManager() {
                   />
                 </div>
               </div>
+
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -207,6 +219,7 @@ export default function ModuleManager() {
                   Module Visible to Students
                 </label>
               </div>
+
               <div className="flex flex-wrap gap-3 pt-2">
                 <button
                   onClick={(e) => saveEdit(module.id!, e)}
@@ -235,6 +248,7 @@ export default function ModuleManager() {
       </AnimatePresence>
     </div>
   );
+
   return (
     <div className="glass-light border border-gray-200 rounded-xl p-3 md:p-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4 md:mb-6">
@@ -271,6 +285,7 @@ export default function ModuleManager() {
           </div>
         </div>
       </div>
+
       {loading ? (
         <div className="text-center py-8">
           <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>

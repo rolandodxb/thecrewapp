@@ -1,4 +1,6 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import { collection, doc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from 'firebase/firestore';
+
 export interface Recruiter {
   id?: string;
   name: string;
@@ -9,11 +11,13 @@ export interface Recruiter {
   created_at?: string;
   last_updated?: string;
 }
+
 export async function getAllRecruiters(): Promise<Recruiter[]> {
   try {
     const recruitersRef = collection(db, 'recruiters');
     const q = query(recruitersRef, orderBy('last_updated', 'desc'));
     const querySnapshot = await getDocs(q);
+
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
@@ -23,6 +27,7 @@ export async function getAllRecruiters(): Promise<Recruiter[]> {
     return [];
   }
 }
+
 export async function createRecruiter(recruiter: Recruiter, userId: string): Promise<Recruiter | null> {
   try {
     const recruitersRef = collection(db, 'recruiters');
@@ -32,6 +37,7 @@ export async function createRecruiter(recruiter: Recruiter, userId: string): Pro
       created_at: Timestamp.now(),
       last_updated: Timestamp.now()
     });
+
     return {
       id: docRef.id,
       ...recruiter,
@@ -42,6 +48,7 @@ export async function createRecruiter(recruiter: Recruiter, userId: string): Pro
     return null;
   }
 }
+
 export async function updateRecruiter(id: string, updates: Partial<Recruiter>): Promise<boolean> {
   try {
     const recruiterRef = doc(db, 'recruiters', id);
@@ -55,6 +62,7 @@ export async function updateRecruiter(id: string, updates: Partial<Recruiter>): 
     return false;
   }
 }
+
 export async function deleteRecruiter(id: string): Promise<boolean> {
   try {
     const recruiterRef = doc(db, 'recruiters', id);

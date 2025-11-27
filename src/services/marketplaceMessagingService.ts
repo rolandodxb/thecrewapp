@@ -1,4 +1,20 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  Timestamp,
+  arrayUnion,
+  addDoc
+} from 'firebase/firestore';
+
 export interface MarketplaceMessage {
   senderId: string;
   senderName: string;
@@ -9,6 +25,7 @@ export interface MarketplaceMessage {
   messageType: 'text' | 'image' | 'file';
   read: boolean;
 }
+
 export interface MarketplaceConversation {
   id: string;
   conversationId: string;
@@ -29,6 +46,7 @@ export interface MarketplaceConversation {
   };
   messages: MarketplaceMessage[];
 }
+
 export const createConversation = async (
   buyerId: string,
   buyerName: string,
@@ -44,8 +62,10 @@ export const createConversation = async (
     if (existingConv) {
       return existingConv.id;
     }
+
     const conversationRef = doc(collection(db, 'marketplace_messages'));
     const conversationId = `${productId}_${buyerId}_${sellerId}`;
+
     const conversation: Omit<MarketplaceConversation, 'id'> = {
       conversationId,
       createdBy: buyerId,
@@ -67,7 +87,9 @@ export const createConversation = async (
       },
       messages: [],
     };
+
     await setDoc(conversationRef, conversation);
+
     // Also save to conversations collection for retrieval from community chat
     const communityConvRef = doc(collection(db, 'conversations'));
     await setDoc(communityConvRef, {
@@ -85,6 +107,7 @@ export const createConversation = async (
       createdAt: Timestamp.now(),
       marketplaceConversationId: conversationRef.id,
     });
+
     console.log('Conversation created:', conversationRef.id);
     return conversationRef.id;
   } catch (error) {
@@ -92,6 +115,7 @@ export const createConversation = async (
     throw error;
   }
 };
+
 const getExistingConversation = async (
   buyerId: string,
   sellerId: string,
@@ -104,6 +128,7 @@ const getExistingConversation = async (
       where('productId', '==', productId),
       where('participants', 'array-contains', buyerId)
     );
+
     const snapshot = await getDocs(q);
     for (const doc of snapshot.docs) {
       const data = doc.data();
@@ -117,6 +142,7 @@ const getExistingConversation = async (
     return null;
   }
 };
+
 export const sendMessage = async (
   conversationId: string,
   senderId: string,
@@ -128,6 +154,7 @@ export const sendMessage = async (
 ): Promise<void> => {
   try {
     const conversationRef = doc(db, 'marketplace_messages', conversationId);
+
     const newMessage: MarketplaceMessage = {
       senderId,
       senderName,
@@ -138,22 +165,26 @@ export const sendMessage = async (
       messageType,
       read: false,
     };
+
     await updateDoc(conversationRef, {
       messages: arrayUnion(newMessage),
       lastMessage: message,
       lastMessageTimestamp: Timestamp.now(),
       [`unreadCount.${receiverId}`]: (await getUnreadCount(conversationId, receiverId)) + 1,
     });
+
     console.log('Message sent in conversation:', conversationId);
   } catch (error) {
     console.error('Error sending message:', error);
     throw error;
   }
 };
+
 const getUnreadCount = async (conversationId: string, userId: string): Promise<number> => {
   try {
     const conversationRef = doc(db, 'marketplace_messages', conversationId);
     const conversationSnap = await getDoc(conversationRef);
+
     if (conversationSnap.exists()) {
       const data = conversationSnap.data();
       return data.unreadCount?.[userId] || 0;
@@ -163,6 +194,7 @@ const getUnreadCount = async (conversationId: string, userId: string): Promise<n
     return 0;
   }
 };
+
 export const markMessagesAsRead = async (
   conversationId: string,
   userId: string
@@ -176,12 +208,14 @@ export const markMessagesAsRead = async (
     console.error('Error marking messages as read:', error);
   }
 };
+
 export const getConversation = async (
   conversationId: string
 ): Promise<MarketplaceConversation | null> => {
   try {
     const conversationRef = doc(db, 'marketplace_messages', conversationId);
     const conversationSnap = await getDoc(conversationRef);
+
     if (conversationSnap.exists()) {
       return { id: conversationSnap.id, ...conversationSnap.data() } as MarketplaceConversation;
     }
@@ -191,6 +225,7 @@ export const getConversation = async (
     return null;
   }
 };
+
 export const getUserConversations = async (userId: string): Promise<MarketplaceConversation[]> => {
   try {
     const conversationsRef = collection(db, 'marketplace_messages');
@@ -199,6 +234,7 @@ export const getUserConversations = async (userId: string): Promise<MarketplaceC
       where('participants', 'array-contains', userId),
       orderBy('lastMessageTimestamp', 'desc')
     );
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -209,11 +245,13 @@ export const getUserConversations = async (userId: string): Promise<MarketplaceC
     return [];
   }
 };
+
 export const subscribeToConversation = (
   conversationId: string,
   callback: (conversation: MarketplaceConversation | null) => void
 ): (() => void) => {
   const conversationRef = doc(db, 'marketplace_messages', conversationId);
+
   return onSnapshot(conversationRef, (snapshot) => {
     if (snapshot.exists()) {
       callback({ id: snapshot.id, ...snapshot.data() } as MarketplaceConversation);
@@ -222,6 +260,7 @@ export const subscribeToConversation = (
     }
   });
 };
+
 export const subscribeToUserConversations = (
   userId: string,
   callback: (conversations: MarketplaceConversation[]) => void
@@ -232,6 +271,7 @@ export const subscribeToUserConversations = (
     where('participants', 'array-contains', userId),
     orderBy('lastMessageTimestamp', 'desc')
   );
+
   return onSnapshot(q, (snapshot) => {
     const conversations = snapshot.docs.map(doc => ({
       id: doc.id,
@@ -240,6 +280,7 @@ export const subscribeToUserConversations = (
     callback(conversations);
   });
 };
+
 export const getTotalUnreadCount = async (userId: string): Promise<number> => {
   try {
     const conversations = await getUserConversations(userId);

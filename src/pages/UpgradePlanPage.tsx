@@ -3,11 +3,13 @@ import { motion } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../lib/auth';
+import { auth } from '../lib/firebase';
+
 export default function UpgradePlanPage() {
   const { currentUser } = useApp();
   const [loading, setLoading] = useState<string | null>(null);
   const navigate = useNavigate();
+
   // Hide upgrade page for VIP users - they're already at max tier
   if (currentUser && currentUser.plan === 'vip') {
     return (
@@ -30,25 +32,32 @@ export default function UpgradePlanPage() {
       </div>
     );
   }
+
   const handleUpgrade = async (planName: string, priceId: string) => {
     if (!currentUser) {
       alert('Please log in to upgrade your plan');
       navigate('/login');
       return;
     }
+
     setLoading(planName);
     try {
       const firebaseUser = auth.currentUser;
+
       if (!firebaseUser) {
         alert('Please log in to upgrade your plan');
         navigate('/login');
         return;
       }
+
       const idToken = await firebaseUser.getIdToken();
+
       const successUrl = `${window.location.origin}/dashboard?upgrade=success`;
       const cancelUrl = `${window.location.origin}/upgrade-plan?upgrade=cancelled`;
+
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
       const response = await fetch(`${supabaseUrl}/functions/v1/stripe-checkout`, {
         method: 'POST',
         headers: {
@@ -64,14 +73,18 @@ export default function UpgradePlanPage() {
           firebase_uid: currentUser.uid
         })
       });
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to create checkout session');
       }
+
       const data = await response.json();
+
       if (!data?.url) {
         throw new Error('No checkout URL returned');
       }
+
       window.location.href = data.url;
     } catch (error) {
       console.error('Upgrade error:', error);
@@ -81,6 +94,7 @@ export default function UpgradePlanPage() {
       setLoading(null);
     }
   };
+
   const plans = [
     {
       name: 'Free',
@@ -136,6 +150,7 @@ export default function UpgradePlanPage() {
       disabled: [],
     },
   ];
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <motion.div
@@ -148,10 +163,12 @@ export default function UpgradePlanPage() {
           Select the perfect plan for your cabin crew journey
         </p>
       </motion.div>
+
       <div className="grid md:grid-cols-3 gap-6 mb-12">
         {plans.map((planItem, index) => {
           const Icon = planItem.icon;
           const isCurrentPlan = currentUser?.plan === planItem.plan;
+
           return (
             <motion.div
               key={planItem.name}
@@ -167,6 +184,7 @@ export default function UpgradePlanPage() {
                   Most Popular
                 </div>
               )}
+
               <div className="text-center mb-6">
                 <div
                   className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center ${
@@ -184,6 +202,7 @@ export default function UpgradePlanPage() {
                   <span className="text-4xl font-bold text-[#000000]">${planItem.price}</span>
                   <span className="text-gray-500">/month</span>
                 </div>
+
                 {isCurrentPlan ? (
                   <div className="px-6 py-3 bg-gray-200 text-gray-600 rounded-xl font-bold">
                     Current Plan
@@ -206,6 +225,7 @@ export default function UpgradePlanPage() {
                   </button>
                 )}
               </div>
+
               <div className="space-y-3">
                 <div className="font-bold text-sm text-gray-700 mb-2">Includes:</div>
                 {planItem.features.map((feature, i) => (
@@ -219,6 +239,7 @@ export default function UpgradePlanPage() {
           );
         })}
       </div>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

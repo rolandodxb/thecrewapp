@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Search, Mail, MapPin, Calendar, Award, BookOpen, TrendingUp, Filter } from 'lucide-react';
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import { collection, query, where, getDocs, orderBy as firestoreOrderBy } from 'firebase/firestore';
 import { useApp } from '../context/AppContext';
+
 interface Student {
   id: string;
   name: string;
@@ -15,25 +17,30 @@ interface Student {
   photo_base64: string;
   photoURL?: string;
 }
+
 interface StudentStats {
   totalCourses: number;
   completedCourses: number;
   enrolledCourses: number;
 }
+
 export default function StudentsPage() {
   const { currentUser } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPlan, setSelectedPlan] = useState<string>('all');
+
   useEffect(() => {
     loadStudents();
   }, []);
+
   const loadStudents = async () => {
     try {
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('role', '==', 'student'));
       const querySnapshot = await getDocs(q);
+
       const studentsData: Student[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
@@ -50,6 +57,7 @@ export default function StudentsPage() {
           photoURL: data.photoURL || data.profilePicture || ''
         });
       });
+
       studentsData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setStudents(studentsData);
     } catch (error) {
@@ -58,6 +66,7 @@ export default function StudentsPage() {
       setLoading(false);
     }
   };
+
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -65,6 +74,7 @@ export default function StudentsPage() {
     const matchesPlan = selectedPlan === 'all' || student.plan === selectedPlan;
     return matchesSearch && matchesPlan;
   });
+
   const getPlanBadgeColor = (plan: string) => {
     switch (plan) {
       case 'vip':
@@ -75,6 +85,7 @@ export default function StudentsPage() {
         return 'bg-gray-200 text-gray-700';
     }
   };
+
   const getStudentInitials = (name: string) => {
     return name
       .split(' ')
@@ -83,6 +94,7 @@ export default function StudentsPage() {
       .toUpperCase()
       .slice(0, 2);
   };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -90,6 +102,7 @@ export default function StudentsPage() {
       </div>
     );
   }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -104,6 +117,7 @@ export default function StudentsPage() {
           {filteredStudents.length} Students
         </div>
       </div>
+
       <div className="glass-light rounded-2xl shadow-lg p-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
@@ -131,6 +145,7 @@ export default function StudentsPage() {
           </div>
         </div>
       </div>
+
       {filteredStudents.length === 0 ? (
         <div className="glass-light rounded-2xl shadow-lg p-12 text-center">
           <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -144,6 +159,7 @@ export default function StudentsPage() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredStudents.map((student, index) => {
+
             return (
               <motion.div
                 key={student.id}
@@ -177,19 +193,23 @@ export default function StudentsPage() {
                     </span>
                   </div>
                 </div>
+
                 <div className="p-6 space-y-4">
                   <div className="flex items-center gap-2 text-gray-700">
                     <MapPin className="w-4 h-4 text-[#D71921]" />
                     <span>{student.country}</span>
                   </div>
+
                   <div className="flex items-center gap-2 text-gray-700">
                     <Calendar className="w-4 h-4 text-[#D71921]" />
                     <span>Joined {new Date(student.createdAt).toLocaleDateString()}</span>
                   </div>
+
                   <div className="flex items-center gap-2 text-gray-700">
                     <TrendingUp className="w-4 h-4 text-[#D71921]" />
                     <span>Last updated: {new Date(student.updatedAt).toLocaleDateString()}</span>
                   </div>
+
                   {student.bio && (
                     <p className="text-sm text-gray-600 line-clamp-3 pt-2 border-t border-gray-100">
                       {student.bio}

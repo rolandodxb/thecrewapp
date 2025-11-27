@@ -1,4 +1,17 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  updateDoc,
+  Timestamp,
+  increment
+} from 'firebase/firestore';
+
 export interface ModuleEnrollment {
   user_id: string;
   module_id: string;
@@ -9,6 +22,7 @@ export interface ModuleEnrollment {
   completed: boolean;
   completed_at?: string;
 }
+
 export interface CourseProgress {
   user_id: string;
   course_id: string;
@@ -20,6 +34,7 @@ export interface CourseProgress {
   completed: boolean;
   completed_at?: string;
 }
+
 export interface VideoProgress {
   user_id: string;
   course_id: string;
@@ -29,6 +44,7 @@ export interface VideoProgress {
   last_watched: string;
   completed: boolean;
 }
+
 export const enrollInModule = async (
   userId: string,
   moduleId: string,
@@ -36,6 +52,7 @@ export const enrollInModule = async (
 ): Promise<void> => {
   try {
     const enrollmentRef = doc(db, 'course_enrollments', `${userId}_${moduleId}`);
+
     const enrollment = {
       user_id: userId,
       course_id: moduleId,
@@ -46,6 +63,7 @@ export const enrollInModule = async (
       progress_percentage: 0,
       completed: false
     };
+
     await setDoc(enrollmentRef, enrollment);
     console.log('Enrolled in module:', moduleId);
   } catch (error) {
@@ -53,6 +71,7 @@ export const enrollInModule = async (
     throw error;
   }
 };
+
 export const isEnrolledInModule = async (
   userId: string,
   moduleId: string
@@ -66,6 +85,7 @@ export const isEnrolledInModule = async (
     return false;
   }
 };
+
 export const getModuleEnrollment = async (
   userId: string,
   moduleId: string
@@ -73,6 +93,7 @@ export const getModuleEnrollment = async (
   try {
     const enrollmentRef = doc(db, 'course_enrollments', `${userId}_${moduleId}`);
     const enrollmentSnap = await getDoc(enrollmentRef);
+
     if (enrollmentSnap.exists()) {
       return enrollmentSnap.data() as ModuleEnrollment;
     }
@@ -82,6 +103,7 @@ export const getModuleEnrollment = async (
     return null;
   }
 };
+
 export const updateLastAccessed = async (
   userId: string,
   moduleId: string
@@ -99,6 +121,7 @@ export const updateLastAccessed = async (
     console.error('Error updating last accessed:', error);
   }
 };
+
 export const trackCourseProgress = async (
   userId: string,
   courseId: string,
@@ -109,7 +132,9 @@ export const trackCourseProgress = async (
   try {
     const progressRef = doc(db, 'course_progress', `${userId}_${courseId}`);
     const progressSnap = await getDoc(progressRef);
+
     const isCompleted = videoProgress >= videoDuration * 0.9;
+
     if (progressSnap.exists()) {
       const updates: any = {
         last_accessed: new Date().toISOString(),
@@ -117,9 +142,11 @@ export const trackCourseProgress = async (
         video_duration: videoDuration,
         completed: isCompleted
       };
+
       if (isCompleted && !progressSnap.data().completed) {
         updates.completed_at = new Date().toISOString();
       }
+
       await updateDoc(progressRef, updates);
     } else {
       const progress: CourseProgress = {
@@ -133,8 +160,10 @@ export const trackCourseProgress = async (
         completed: isCompleted,
         completed_at: isCompleted ? new Date().toISOString() : undefined
       };
+
       await setDoc(progressRef, progress);
     }
+
     await updateModuleProgress(userId, moduleId);
   } catch (error: any) {
     // Suppress permission errors until Firestore rules are deployed
@@ -146,6 +175,7 @@ export const trackCourseProgress = async (
     throw error;
   }
 };
+
 export const getCourseProgress = async (
   userId: string,
   courseId: string
@@ -153,6 +183,7 @@ export const getCourseProgress = async (
   try {
     const progressRef = doc(db, 'course_progress', `${userId}_${courseId}`);
     const progressSnap = await getDoc(progressRef);
+
     if (progressSnap.exists()) {
       return progressSnap.data() as CourseProgress;
     }
@@ -162,6 +193,7 @@ export const getCourseProgress = async (
     return null;
   }
 };
+
 export const updateModuleProgress = async (
   userId: string,
   moduleId: string
@@ -172,26 +204,33 @@ export const updateModuleProgress = async (
       where('user_id', '==', userId),
       where('module_id', '==', moduleId)
     );
+
     const progressSnap = await getDocs(progressQuery);
     const totalCourses = progressSnap.size;
+
     if (totalCourses === 0) return;
+
     const completedCourses = progressSnap.docs.filter(
       doc => doc.data().completed
     ).length;
+
     const progressPercentage = (completedCourses / totalCourses) * 100;
     const isModuleCompleted = progressPercentage === 100;
+
     const enrollmentRef = doc(db, 'course_enrollments', `${userId}_${moduleId}`);
     const updates: any = {
       progress_percentage: progressPercentage,
       completed: isModuleCompleted,
       last_accessed: Timestamp.now()
     };
+
     if (isModuleCompleted) {
       const enrollmentSnap = await getDoc(enrollmentRef);
       if (enrollmentSnap.exists() && !enrollmentSnap.data().completed) {
         updates.completed_at = Timestamp.now();
       }
     }
+
     await setDoc(enrollmentRef, updates, { merge: true });
   } catch (error: any) {
     if (error?.code === 'permission-denied') {
@@ -201,6 +240,7 @@ export const updateModuleProgress = async (
     console.error('Error updating module progress:', error);
   }
 };
+
 export const saveVideoProgress = async (
   userId: string,
   courseId: string,
@@ -210,6 +250,7 @@ export const saveVideoProgress = async (
 ): Promise<void> => {
   try {
     const videoProgressRef = doc(db, 'video_progress', `${userId}_${courseId}`);
+
     const videoProgress: VideoProgress = {
       user_id: userId,
       course_id: courseId,
@@ -219,11 +260,13 @@ export const saveVideoProgress = async (
       last_watched: new Date().toISOString(),
       completed: currentTime >= duration * 0.9
     };
+
     await setDoc(videoProgressRef, videoProgress);
   } catch (error) {
     console.error('Error saving video progress:', error);
   }
 };
+
 export const getVideoProgress = async (
   userId: string,
   courseId: string
@@ -231,6 +274,7 @@ export const getVideoProgress = async (
   try {
     const videoProgressRef = doc(db, 'video_progress', `${userId}_${courseId}`);
     const videoProgressSnap = await getDoc(videoProgressRef);
+
     if (videoProgressSnap.exists()) {
       return videoProgressSnap.data() as VideoProgress;
     }
@@ -240,6 +284,7 @@ export const getVideoProgress = async (
     return null;
   }
 };
+
 export const getUserEnrollments = async (
   userId: string
 ): Promise<ModuleEnrollment[]> => {
@@ -248,6 +293,7 @@ export const getUserEnrollments = async (
       collection(db, 'course_enrollments'),
       where('user_id', '==', userId)
     );
+
     const enrollmentsSnap = await getDocs(enrollmentsQuery);
     return enrollmentsSnap.docs.map(doc => doc.data() as ModuleEnrollment);
   } catch (error) {
@@ -255,20 +301,24 @@ export const getUserEnrollments = async (
     return [];
   }
 };
+
 export const getAverageProgress = async (userId: string): Promise<number> => {
   try {
     const enrollments = await getUserEnrollments(userId);
     if (enrollments.length === 0) return 0;
+
     const totalProgress = enrollments.reduce(
       (sum, enrollment) => sum + (enrollment.progress_percentage || 0),
       0
     );
+
     return Math.round(totalProgress / enrollments.length);
   } catch (error) {
     console.error('Error getting average progress:', error);
     return 0;
   }
 };
+
 export const getCompletedModulesCount = async (userId: string): Promise<number> => {
   try {
     const enrollments = await getUserEnrollments(userId);
@@ -278,6 +328,7 @@ export const getCompletedModulesCount = async (userId: string): Promise<number> 
     return 0;
   }
 };
+
 export const getInProgressModulesCount = async (userId: string): Promise<number> => {
   try {
     const enrollments = await getUserEnrollments(userId);
@@ -287,6 +338,7 @@ export const getInProgressModulesCount = async (userId: string): Promise<number>
     return 0;
   }
 };
+
 // Course Enrollments (using course_enrollments collection)
 export interface CourseEnrollment {
   user_id: string;
@@ -299,18 +351,21 @@ export interface CourseEnrollment {
   current_module?: string;
   current_lesson?: string;
 }
+
 export const enrollInCourse = async (
   userId: string,
   courseId: string
 ): Promise<void> => {
   try {
     const enrollmentRef = doc(db, 'course_enrollments', `${userId}_${courseId}`);
+
     // Check if already enrolled
     const existingEnrollment = await getDoc(enrollmentRef);
     if (existingEnrollment.exists()) {
       console.log('Already enrolled in course:', courseId);
       return;
     }
+
     const enrollment: CourseEnrollment = {
       user_id: userId,
       course_id: courseId,
@@ -319,6 +374,7 @@ export const enrollInCourse = async (
       progress_percentage: 0,
       completed: false
     };
+
     await setDoc(enrollmentRef, enrollment);
     console.log('Enrolled in course:', courseId);
   } catch (error) {
@@ -326,6 +382,7 @@ export const enrollInCourse = async (
     throw error;
   }
 };
+
 export const isEnrolledInCourse = async (
   userId: string,
   courseId: string
@@ -339,6 +396,7 @@ export const isEnrolledInCourse = async (
     return false;
   }
 };
+
 export const getCourseEnrollment = async (
   userId: string,
   courseId: string
@@ -346,6 +404,7 @@ export const getCourseEnrollment = async (
   try {
     const enrollmentRef = doc(db, 'course_enrollments', `${userId}_${courseId}`);
     const enrollmentSnap = await getDoc(enrollmentRef);
+
     if (enrollmentSnap.exists()) {
       return enrollmentSnap.data() as CourseEnrollment;
     }
@@ -355,6 +414,7 @@ export const getCourseEnrollment = async (
     return null;
   }
 };
+
 export const updateCourseProgress = async (
   userId: string,
   courseId: string,
@@ -365,19 +425,23 @@ export const updateCourseProgress = async (
   try {
     const enrollmentRef = doc(db, 'course_enrollments', `${userId}_${courseId}`);
     const isCompleted = progressPercentage >= 100;
+
     const updates: any = {
       last_accessed: Timestamp.now(),
       progress_percentage: progressPercentage,
       completed: isCompleted
     };
+
     if (currentModule) updates.current_module = currentModule;
     if (currentLesson) updates.current_lesson = currentLesson;
+
     if (isCompleted) {
       const existingEnrollment = await getDoc(enrollmentRef);
       if (existingEnrollment.exists() && !existingEnrollment.data().completed) {
         updates.completed_at = Timestamp.now();
       }
     }
+
     await setDoc(enrollmentRef, updates, { merge: true });
   } catch (error: any) {
     if (error?.code === 'permission-denied') {
@@ -387,6 +451,7 @@ export const updateCourseProgress = async (
     console.error('Error updating course progress:', error);
   }
 };
+
 export const getUserCourseEnrollments = async (
   userId: string
 ): Promise<CourseEnrollment[]> => {
@@ -395,6 +460,7 @@ export const getUserCourseEnrollments = async (
       collection(db, 'course_enrollments'),
       where('user_id', '==', userId)
     );
+
     const enrollmentsSnap = await getDocs(enrollmentsQuery);
     return enrollmentsSnap.docs.map(doc => doc.data() as CourseEnrollment);
   } catch (error) {

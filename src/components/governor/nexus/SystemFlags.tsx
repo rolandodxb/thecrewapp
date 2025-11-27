@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Settings, MessageCircle, Brain, FileQuestion, AlertCircle, Calendar, Users } from 'lucide-react';
-import { supabase } from '../../../lib/auth';
+import { doc, getDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
+import { db } from '../../../lib/firebase';
 import { useApp } from '../../../context/AppContext';
 import { getSystemControl, SystemFeatures } from '../../../services/systemControlService';
+
 export default function SystemFlags() {
   const { currentUser } = useApp();
   const [features, setFeatures] = useState<SystemFeatures>({
@@ -15,10 +17,13 @@ export default function SystemFlags() {
   });
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+
   const isGovernor = currentUser?.role === 'governor';
+
   useEffect(() => {
     loadFeatures();
   }, []);
+
   const loadFeatures = async () => {
     try {
       const control = await getSystemControl();
@@ -31,6 +36,7 @@ export default function SystemFlags() {
       setLoading(false);
     }
   };
+
   const logAction = async (flagName: string, newValue: boolean) => {
     try {
       await addDoc(collection(db, 'auditEvents'), {
@@ -44,10 +50,13 @@ export default function SystemFlags() {
       console.error('Error logging action:', error);
     }
   };
+
   const handleToggle = async (featureName: keyof SystemFeatures) => {
     if (!isGovernor || !currentUser) return;
+
     setUpdating(featureName);
     const newValue = !features[featureName];
+
     try {
       const control = await getSystemControl();
       if (control) {
@@ -55,11 +64,13 @@ export default function SystemFlags() {
           ...control.features,
           [featureName]: newValue
         };
+
         await updateDoc(doc(db, 'systemControl', 'status'), {
           features: updatedFeatures,
           updatedBy: currentUser.uid,
           updatedAt: new Date()
         });
+
         setFeatures(updatedFeatures);
         await logAction(featureName, newValue);
       }
@@ -70,6 +81,7 @@ export default function SystemFlags() {
       setUpdating(null);
     }
   };
+
   const flagConfig = [
     {
       key: 'chat' as keyof SystemFeatures,
@@ -107,6 +119,7 @@ export default function SystemFlags() {
       description: 'Enable/disable Open Day simulator',
     },
   ];
+
   if (loading) {
     return (
       <motion.div
@@ -118,6 +131,7 @@ export default function SystemFlags() {
       </motion.div>
     );
   }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -128,6 +142,7 @@ export default function SystemFlags() {
         <Settings className="w-5 h-5 text-gray-700" />
         <h2 className="text-xl font-bold text-gray-900">System Feature Flags</h2>
       </div>
+
       {!isGovernor && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-300 rounded-xl flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
@@ -136,11 +151,13 @@ export default function SystemFlags() {
           </p>
         </div>
       )}
+
       <div className="space-y-3">
         {flagConfig.map((flag, index) => {
           const Icon = flag.icon;
           const isEnabled = features[flag.key];
           const isUpdating = updating === flag.key;
+
           return (
             <motion.div
               key={flag.key}
@@ -171,6 +188,7 @@ export default function SystemFlags() {
                     <p className="text-xs text-gray-600">{flag.description}</p>
                   </div>
                 </div>
+
                 <button
                   onClick={() => handleToggle(flag.key)}
                   disabled={!isGovernor || isUpdating}
@@ -185,6 +203,7 @@ export default function SystemFlags() {
                   />
                 </button>
               </div>
+
               {isEnabled && (
                 <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
                   <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
@@ -195,6 +214,7 @@ export default function SystemFlags() {
           );
         })}
       </div>
+
       <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
         <p className="text-xs text-blue-700">
           <strong>Note:</strong> Changes to system flags are instantly reflected across the entire platform.

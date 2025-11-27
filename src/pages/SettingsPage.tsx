@@ -1,47 +1,62 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { User, Lock, Bell, Globe, Palette, Shield, Trash2, Mail, Camera, Save, Smartphone, Monitor, MapPin, Clock } from 'lucide-react';
-import { supabase } from '../lib/auth';
+import { doc, updateDoc, collection, query, where, getDocs, orderBy, limit as limitQuery, deleteDoc } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { countries } from '../data/countries';
 import { useNavigate } from 'react-router-dom';
 import TwoFactorSetup from '../components/TwoFactorSetup';
 import { Copy, Check } from 'lucide-react';
+
 type SettingsTab = 'profile' | 'account' | 'notifications' | 'preferences' | 'privacy';
+
 export default function SettingsPage() {
   const { currentUser, setCurrentUser } = useApp();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+
   const [name, setName] = useState(currentUser?.name || '');
   const [bio, setBio] = useState(currentUser?.bio || '');
   const [country, setCountry] = useState(currentUser?.country || '');
   const [photoURL, setPhotoURL] = useState(currentUser?.photoURL || '');
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [courseUpdates, setCourseUpdates] = useState(true);
   const [communityMessages, setCommunityMessages] = useState(true);
   const [mentorMessages, setMentorMessages] = useState(true);
+
   const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('light');
   const [language, setLanguage] = useState('en');
+
   const [loginSessions, setLoginSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+
+
   useEffect(() => {
     if (currentUser) {
       setName(currentUser.name || '');
       setBio(currentUser.bio || '');
       setCountry(currentUser.country || '');
       setPhotoURL(currentUser.photoURL || '');
+
       if (activeTab === 'privacy') {
         loadLoginSessions();
       }
     }
   }, [currentUser, activeTab]);
+
+
   const loadLoginSessions = async () => {
     if (!currentUser) return;
+
     setLoadingSessions(true);
     try {
       const q = query(
@@ -51,11 +66,13 @@ export default function SettingsPage() {
         orderBy('timestamp', 'desc'),
         limitQuery(10)
       );
+
       const snapshot = await getDocs(q);
       const sessions = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
       }));
+
       setLoginSessions(sessions);
     } catch (error) {
       console.error('Error loading login sessions:', error);
@@ -63,8 +80,10 @@ export default function SettingsPage() {
       setLoadingSessions(false);
     }
   };
+
   const handleRevokeSession = async (sessionId: string) => {
     if (!confirm('Revoke this session? You will need to log in again from that device.')) return;
+
     try {
       await deleteDoc(doc(db, 'loginActivity', sessionId));
       setLoginSessions(prev => prev.filter(s => s.id !== sessionId));
@@ -74,14 +93,18 @@ export default function SettingsPage() {
       setMessage('Failed to revoke session.');
     }
   };
+
   const getDeviceIcon = (deviceType: string) => {
     return deviceType === 'mobile' ? <Smartphone className="w-5 h-5" /> : <Monitor className="w-5 h-5" />;
   };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+
     setLoading(true);
     setMessage('');
+
     try {
       await updateDoc(doc(db, 'users', currentUser.uid), {
         name,
@@ -90,6 +113,7 @@ export default function SettingsPage() {
         photoURL,
         updatedAt: new Date().toISOString(),
       });
+
       setCurrentUser({
         ...currentUser,
         name,
@@ -97,6 +121,7 @@ export default function SettingsPage() {
         country,
         photoURL,
       });
+
       setMessage('Profile updated successfully!');
     } catch (error) {
       console.error('Profile update error:', error);
@@ -105,19 +130,24 @@ export default function SettingsPage() {
       setLoading(false);
     }
   };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !auth.currentUser) return;
+
     if (newPassword !== confirmPassword) {
       setMessage('New passwords do not match!');
       return;
     }
+
     if (newPassword.length < 6) {
       setMessage('Password must be at least 6 characters long!');
       return;
     }
+
     setLoading(true);
     setMessage('');
+
     try {
       const credential = EmailAuthProvider.credential(
         auth.currentUser.email!,
@@ -125,6 +155,7 @@ export default function SettingsPage() {
       );
       await reauthenticateWithCredential(auth.currentUser, credential);
       await updatePassword(auth.currentUser, newPassword);
+
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -140,10 +171,13 @@ export default function SettingsPage() {
       setLoading(false);
     }
   };
+
   const handleSaveNotifications = async () => {
     if (!currentUser) return;
+
     setLoading(true);
     setMessage('');
+
     try {
       await updateDoc(doc(db, 'users', currentUser.uid), {
         notificationSettings: {
@@ -155,6 +189,7 @@ export default function SettingsPage() {
         },
         updatedAt: new Date().toISOString(),
       });
+
       setMessage('Notification preferences saved!');
     } catch (error) {
       console.error('Notification update error:', error);
@@ -163,10 +198,13 @@ export default function SettingsPage() {
       setLoading(false);
     }
   };
+
   const handleSavePreferences = async () => {
     if (!currentUser) return;
+
     setLoading(true);
     setMessage('');
+
     try {
       await updateDoc(doc(db, 'users', currentUser.uid), {
         preferences: {
@@ -175,6 +213,7 @@ export default function SettingsPage() {
         },
         updatedAt: new Date().toISOString(),
       });
+
       setMessage('Preferences saved!');
     } catch (error) {
       console.error('Preferences update error:', error);
@@ -183,6 +222,7 @@ export default function SettingsPage() {
       setLoading(false);
     }
   };
+
   const tabs = [
     { id: 'profile' as SettingsTab, label: 'Profile', icon: User },
     { id: 'account' as SettingsTab, label: 'Account', icon: Lock },
@@ -190,17 +230,20 @@ export default function SettingsPage() {
     { id: 'preferences' as SettingsTab, label: 'Preferences', icon: Palette },
     { id: 'privacy' as SettingsTab, label: 'Privacy', icon: Shield },
   ];
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl md:text-4xl font-black text-gray-900 mb-2">Settings</h1>
         <p className="text-gray-600">Manage your account settings and preferences</p>
       </div>
+
       {message && (
         <div className={`mb-6 p-4 rounded-xl ${message.includes('success') || message.includes('saved') ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
           {message}
         </div>
       )}
+
       <div className="flex flex-col md:flex-row gap-6">
         <div className="md:w-64 flex-shrink-0">
           <div className="glass-card rounded-2xl p-2">
@@ -223,6 +266,7 @@ export default function SettingsPage() {
             })}
           </div>
         </div>
+
         <div className="flex-1">
           <div className="glass-card rounded-2xl p-6 md:p-8">
             {activeTab === 'profile' && (
@@ -230,6 +274,7 @@ export default function SettingsPage() {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-6">Profile Information</h2>
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Profile Photo URL
@@ -251,6 +296,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Full Name
@@ -263,6 +309,7 @@ export default function SettingsPage() {
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#D71921] focus:ring-2 focus:ring-[#D71921]/20 transition"
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Bio
@@ -275,6 +322,7 @@ export default function SettingsPage() {
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#D71921] focus:ring-2 focus:ring-[#D71921]/20 transition resize-none"
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Country
@@ -292,6 +340,7 @@ export default function SettingsPage() {
                     ))}
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Email
@@ -304,6 +353,7 @@ export default function SettingsPage() {
                   />
                   <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
                 </div>
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -314,11 +364,13 @@ export default function SettingsPage() {
                 </button>
               </form>
             )}
+
             {activeTab === 'account' && (
               <form onSubmit={handleChangePassword} className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-6">Change Password</h2>
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Current Password
@@ -331,6 +383,7 @@ export default function SettingsPage() {
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#D71921] focus:ring-2 focus:ring-[#D71921]/20 transition"
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     New Password
@@ -343,6 +396,7 @@ export default function SettingsPage() {
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#D71921] focus:ring-2 focus:ring-[#D71921]/20 transition"
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Confirm New Password
@@ -355,6 +409,7 @@ export default function SettingsPage() {
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#D71921] focus:ring-2 focus:ring-[#D71921]/20 transition"
                   />
                 </div>
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -363,6 +418,7 @@ export default function SettingsPage() {
                   <Lock className="w-5 h-5" />
                   {loading ? 'Updating...' : 'Update Password'}
                 </button>
+
                 <div className="mt-8 pt-8 border-t border-gray-200">
                   <h3 className="text-lg font-bold text-gray-900 mb-4">Account Status</h3>
                   <div className="space-y-3">
@@ -380,6 +436,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
+
                 <div className="mt-8 pt-8 border-t border-gray-200">
                   <h3 className="text-lg font-bold text-gray-900 mb-4">Two-Factor Authentication</h3>
                   <p className="text-sm text-gray-600 mb-6">
@@ -387,13 +444,16 @@ export default function SettingsPage() {
                   </p>
                   <TwoFactorSetup />
                 </div>
+
               </form>
             )}
+
             {activeTab === 'notifications' && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-6">Notification Preferences</h2>
                 </div>
+
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                     <div>
@@ -410,6 +470,7 @@ export default function SettingsPage() {
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#D71921]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#D71921]"></div>
                     </label>
                   </div>
+
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                     <div>
                       <p className="font-semibold text-gray-900">Push Notifications</p>
@@ -425,6 +486,7 @@ export default function SettingsPage() {
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#D71921]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#D71921]"></div>
                     </label>
                   </div>
+
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                     <div>
                       <p className="font-semibold text-gray-900">Course Updates</p>
@@ -440,6 +502,7 @@ export default function SettingsPage() {
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#D71921]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#D71921]"></div>
                     </label>
                   </div>
+
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                     <div>
                       <p className="font-semibold text-gray-900">Community Messages</p>
@@ -455,6 +518,7 @@ export default function SettingsPage() {
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#D71921]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#D71921]"></div>
                     </label>
                   </div>
+
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                     <div>
                       <p className="font-semibold text-gray-900">Mentor Messages</p>
@@ -471,6 +535,7 @@ export default function SettingsPage() {
                     </label>
                   </div>
                 </div>
+
                 <button
                   onClick={handleSaveNotifications}
                   disabled={loading}
@@ -481,11 +546,13 @@ export default function SettingsPage() {
                 </button>
               </div>
             )}
+
             {activeTab === 'preferences' && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-6">App Preferences</h2>
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Theme
@@ -500,6 +567,7 @@ export default function SettingsPage() {
                     <option value="auto">Auto (Coming Soon)</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Language
@@ -515,6 +583,7 @@ export default function SettingsPage() {
                     <option value="es">Spanish (Coming Soon)</option>
                   </select>
                 </div>
+
                 <button
                   onClick={handleSavePreferences}
                   disabled={loading}
@@ -525,11 +594,13 @@ export default function SettingsPage() {
                 </button>
               </div>
             )}
+
             {activeTab === 'privacy' && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-6">Privacy & Security</h2>
                 </div>
+
                 <div className="space-y-4">
                   <div className="p-6 bg-blue-50 rounded-xl border border-blue-200">
                     <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2">
@@ -546,6 +617,7 @@ export default function SettingsPage() {
                       Setup 2FA (Coming Soon)
                     </button>
                   </div>
+
                   <div className="p-6 bg-gray-50 rounded-xl">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-bold text-gray-900 flex items-center gap-2">
@@ -559,6 +631,7 @@ export default function SettingsPage() {
                         View All Activity →
                       </button>
                     </div>
+
                     {loadingSessions ? (
                       <div className="flex items-center justify-center py-8">
                         <div className="w-8 h-8 border-4 border-[#D71920] border-t-transparent rounded-full animate-spin"></div>
@@ -607,6 +680,7 @@ export default function SettingsPage() {
                       </div>
                     )}
                   </div>
+
                   <div className="p-6 bg-gray-50 rounded-xl">
                     <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
                       <Shield className="w-5 h-5 text-[#D71921]" />
@@ -616,6 +690,7 @@ export default function SettingsPage() {
                       Your data is encrypted and stored securely. We never share your personal information with third parties without your consent.
                     </p>
                   </div>
+
                   <div className="p-6 bg-gray-50 rounded-xl">
                     <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
                       <Mail className="w-5 h-5 text-[#D71921]" />
@@ -625,6 +700,7 @@ export default function SettingsPage() {
                       Control who can send you messages and view your profile information.
                     </p>
                   </div>
+
                   <div className="p-6 bg-red-50 rounded-xl border border-red-200">
                     <h3 className="font-bold text-red-900 mb-2 flex items-center gap-2">
                       <Trash2 className="w-5 h-5 text-red-600" />

@@ -1,47 +1,59 @@
 import { useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp, ArrowDown } from 'lucide-react';
-import { supabase } from '../lib/auth';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
+
 interface SubscriptionCancellationProps {
   userId: string;
   currentPlan: string;
   onCancel: () => void;
 }
+
 export default function SubscriptionCancellation({ userId, currentPlan, onCancel }: SubscriptionCancellationProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [action, setAction] = useState<'cancel' | 'downgrade'>('cancel');
+
   // Only show for paid plans (not free or vip)
   if (currentPlan === 'free') {
     return null;
   }
+
   const canDowngrade = currentPlan === 'vip';
   const downgradeTarget = 'pro';
+
   const handleAction = async () => {
     if (!reason.trim()) {
       alert('Please provide a reason');
       return;
     }
+
     const confirmMessage = action === 'cancel'
       ? 'Are you sure you want to cancel your subscription? You will be downgraded to the free plan and lose access to premium features.'
       : `Are you sure you want to downgrade from ${currentPlan.toUpperCase()} to ${downgradeTarget.toUpperCase()}?`;
+
     if (!confirm(confirmMessage)) {
       return;
     }
+
     setLoading(true);
     try {
       const userRef = doc(db, 'users', userId);
       const newPlan = action === 'cancel' ? 'free' : downgradeTarget;
+
       await updateDoc(userRef, {
         plan: newPlan,
         previousPlan: currentPlan,
         [action === 'cancel' ? 'cancelledAt' : 'downgradedAt']: new Date(),
         [action === 'cancel' ? 'cancellationReason' : 'downgradeReason']: reason
       });
+
       const message = action === 'cancel'
         ? 'Your subscription has been cancelled. You are now on the free plan.'
         : `You have been downgraded to the ${downgradeTarget.toUpperCase()} plan.`;
+
       alert(message);
       onCancel();
       window.location.reload();
@@ -52,6 +64,7 @@ export default function SubscriptionCancellation({ userId, currentPlan, onCancel
       setLoading(false);
     }
   };
+
   return (
     <div className="border-t border-gray-200 pt-6 mt-6">
       <button
@@ -64,6 +77,7 @@ export default function SubscriptionCancellation({ userId, currentPlan, onCancel
         </div>
         {isOpen ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
       </button>
+
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -80,6 +94,7 @@ export default function SubscriptionCancellation({ userId, currentPlan, onCancel
               <p className="text-sm text-gray-600 mb-4">
                 Please let us know why. Your feedback helps us improve.
               </p>
+
               {canDowngrade && (
                 <div className="mb-4 flex gap-2">
                   <button
@@ -105,6 +120,7 @@ export default function SubscriptionCancellation({ userId, currentPlan, onCancel
                   </button>
                 </div>
               )}
+
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -112,6 +128,7 @@ export default function SubscriptionCancellation({ userId, currentPlan, onCancel
                 className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none text-sm"
                 rows={4}
               />
+
               <div className={`mt-4 p-4 border rounded-lg ${
                 action === 'cancel' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'
               }`}>
@@ -140,6 +157,7 @@ export default function SubscriptionCancellation({ userId, currentPlan, onCancel
                   )}
                 </ul>
               </div>
+
               <div className="flex gap-3 mt-4">
                 <button
                   onClick={handleAction}

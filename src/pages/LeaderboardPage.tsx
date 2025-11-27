@@ -3,8 +3,10 @@ import { Trophy, Medal, Award, TrendingUp, Shield, AlertTriangle, Mail, Star } f
 import { motion } from 'framer-motion';
 import { getLeaderboard, UserPoints } from '../services/rewardsService';
 import BadgeDisplay from '../components/BadgeDisplay';
-import { supabase } from '../lib/auth';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
+
 interface UserWithDetails extends UserPoints {
   userName: string;
   email: string;
@@ -13,12 +15,14 @@ interface UserWithDetails extends UserPoints {
   achievements?: string[];
   bio?: string;
 }
+
 interface GroupedUsers {
   governors: UserWithDetails[];
   mentors: UserWithDetails[];
   support: UserWithDetails[];
   students: UserWithDetails[];
 }
+
 export default function LeaderboardPage() {
   const navigate = useNavigate();
   const [groupedUsers, setGroupedUsers] = useState<GroupedUsers>({
@@ -29,18 +33,22 @@ export default function LeaderboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+
   useEffect(() => {
     loadLeaderboard();
   }, []);
+
   const loadLeaderboard = async () => {
     setLoading(true);
     try {
       const usersSnapshot = await getDocs(collection(db, 'users'));
       const leaderboardData = await getLeaderboard(500);
+
       const usersWithDetails: UserWithDetails[] = await Promise.all(
         usersSnapshot.docs.map(async (userDoc) => {
           const userData = userDoc.data();
           const pointsData = leaderboardData.find(p => p.user_id === userDoc.id);
+
           return {
             user_id: userDoc.id,
             userName: userData.name || userData.displayName || 'Unknown User',
@@ -56,12 +64,14 @@ export default function LeaderboardPage() {
           };
         })
       );
+
       const grouped: GroupedUsers = {
         governors: [],
         mentors: [],
         support: [],
         students: []
       };
+
       usersWithDetails.forEach(user => {
         const role = user.role.toLowerCase();
         if (role === 'governor') {
@@ -74,10 +84,12 @@ export default function LeaderboardPage() {
           grouped.students.push(user);
         }
       });
+
       grouped.governors.sort((a, b) => b.total_points - a.total_points);
       grouped.mentors.sort((a, b) => b.total_points - a.total_points);
       grouped.support.sort((a, b) => b.total_points - a.total_points);
       grouped.students.sort((a, b) => b.total_points - a.total_points);
+
       setGroupedUsers(grouped);
     } catch (error) {
       console.error('Error loading leaderboard:', error);
@@ -85,18 +97,21 @@ export default function LeaderboardPage() {
       setLoading(false);
     }
   };
+
   const getRankIcon = (index: number) => {
     if (index === 0) return <Trophy className="w-6 h-6 text-yellow-500" />;
     if (index === 1) return <Medal className="w-6 h-6 text-gray-400" />;
     if (index === 2) return <Award className="w-6 h-6 text-amber-600" />;
     return <span className="text-gray-500 font-bold">#{index + 1}</span>;
   };
+
   const getRankBackground = (index: number) => {
     if (index === 0) return 'from-yellow-50 to-amber-50 border-yellow-300';
     if (index === 1) return 'from-gray-50 to-gray-100 border-gray-300';
     if (index === 2) return 'from-amber-50 to-orange-50 border-amber-300';
     return 'from-white to-gray-50 border-gray-200';
   };
+
   const getRoleDisplay = (role: string) => {
     const roleLower = role.toLowerCase();
     if (roleLower === 'governor') {
@@ -113,6 +128,7 @@ export default function LeaderboardPage() {
     }
     return { label: role, color: 'bg-gray-100 text-gray-900', icon: '👤' };
   };
+
   const getRoleIcon = (role: string) => {
     const roleLower = role.toLowerCase();
     if (roleLower === 'governor') {
@@ -126,6 +142,7 @@ export default function LeaderboardPage() {
     }
     return null;
   };
+
   const renderUserCard = (user: UserWithDetails, index: number, globalIndex: number) => {
     return (
       <motion.div
@@ -141,6 +158,7 @@ export default function LeaderboardPage() {
             <div className="flex items-center justify-center w-10 h-10 flex-shrink-0">
               {getRankIcon(index)}
             </div>
+
             <div
               onClick={(e) => {
                 e.stopPropagation();
@@ -168,6 +186,7 @@ export default function LeaderboardPage() {
                 </div>
               )}
             </div>
+
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <h3 className="font-bold text-base md:text-lg text-gray-900 truncate">
@@ -195,6 +214,7 @@ export default function LeaderboardPage() {
               )}
             </div>
           </div>
+
           <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-auto md:ml-auto">
             <div className="text-right">
               <p className="text-2xl md:text-3xl font-bold text-[#D71920]">
@@ -204,6 +224,7 @@ export default function LeaderboardPage() {
             </div>
           </div>
         </div>
+
         {user.achievements && user.achievements.length > 0 && (
           <div className="mt-4 pt-4 border-t-2 border-white/40">
             <div className="flex flex-wrap gap-2">
@@ -218,6 +239,7 @@ export default function LeaderboardPage() {
             </div>
           </div>
         )}
+
         <motion.div
           initial={{ height: 0, opacity: 0 }}
           animate={{
@@ -234,16 +256,19 @@ export default function LeaderboardPage() {
                   <p className="text-xs text-gray-600 mb-1">Total Points</p>
                   <p className="text-2xl font-bold text-[#D71920]">{user.total_points.toLocaleString()}</p>
                 </div>
+
                 <div className="glass-card rounded-xl p-3">
                   <p className="text-xs text-gray-600 mb-1">Current Rank</p>
                   <div className="flex items-center gap-2">
                     <BadgeDisplay rank={user.current_rank} size="md" />
                   </div>
                 </div>
+
                 <div className="glass-card rounded-xl p-3">
                   <p className="text-xs text-gray-600 mb-1">Daily Streak</p>
                   <p className="text-xl font-bold text-orange-600">{user.daily_login_streak} days 🔥</p>
                 </div>
+
                 {user.verified_crew && (
                   <div className="glass-card rounded-xl p-3 bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-300">
                     <div className="flex items-center gap-2">
@@ -253,12 +278,14 @@ export default function LeaderboardPage() {
                   </div>
                 )}
               </div>
+
               {user.bio && (
                 <div className="glass-card rounded-xl p-3">
                   <p className="text-xs text-gray-600 mb-1">Bio</p>
                   <p className="text-sm text-gray-700">{user.bio}</p>
                 </div>
               )}
+
               {user.achievements && user.achievements.length > 0 && (
                 <div className="glass-card rounded-xl p-3">
                   <p className="text-xs text-gray-600 mb-2">All Achievements</p>
@@ -277,8 +304,10 @@ export default function LeaderboardPage() {
       </motion.div>
     );
   };
+
   const renderSection = (users: UserWithDetails[], title: string, icon: string, gradient: string, startIndex: number) => {
     if (users.length === 0) return null;
+
     return (
       <div className="mb-8">
         <div className={`rounded-2xl p-6 mb-4 shadow-lg bg-gradient-to-br ${gradient} border-2 border-white/40`}>
@@ -304,6 +333,7 @@ export default function LeaderboardPage() {
       </div>
     );
   };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -311,8 +341,10 @@ export default function LeaderboardPage() {
       </div>
     );
   }
+
   const totalUsers = groupedUsers.governors.length + groupedUsers.mentors.length +
                      groupedUsers.support.length + groupedUsers.students.length;
+
   return (
     <div className="min-h-screen p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
@@ -324,6 +356,7 @@ export default function LeaderboardPage() {
               <p className="text-gray-700 mt-1">Top {totalUsers} Academy Members by Performance</p>
             </div>
           </div>
+
           <div className="glass-card rounded-xl p-4 bg-red-50 border-2 border-red-200">
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -337,6 +370,7 @@ export default function LeaderboardPage() {
             </div>
           </div>
         </div>
+
         {totalUsers === 0 ? (
           <div className="glass-card rounded-2xl p-12 text-center">
             <Trophy className="w-16 h-16 text-gray-300 mx-auto mb-4" />

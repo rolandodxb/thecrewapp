@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { communityChatService, Conversation } from '../services/communityChatService';
 import { presenceService } from '../services/presenceService';
 import { aiModeratorBotService } from '../services/aiModeratorBotService';
-import { auth, supabase } from '../lib/auth';
+import { auth } from '../lib/firebase';
 import { checkFeatureAccess } from '../utils/featureAccess';
 import FeatureLock from '../components/FeatureLock';
 import ChatLayout from '../components/chat/ChatLayout';
@@ -15,6 +15,7 @@ import ChatComposer from '../components/chat/ChatComposer';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useTypingIndicator } from '../hooks/useTypingIndicator';
 import { MessageCircle } from 'lucide-react';
+
 export default function CommunityPageNew() {
   const { currentUser } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -22,14 +23,17 @@ export default function CommunityPageNew() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [sending, setSending] = useState(false);
   const moderatorUnsubscribeRef = useRef<(() => void) | null>(null);
+
   const { messages, loading, hasMore, loadMoreMessages } = useChatMessages(
     selectedConversation?.id || null
   );
+
   const { typingUsers, startTyping, stopTyping } = useTypingIndicator(
     selectedConversation?.id || null,
     currentUser?.uid || '',
     currentUser?.name || ''
   );
+
   useEffect(() => {
     const chatId = searchParams.get('chat');
     if (chatId && conversations.length > 0) {
@@ -40,6 +44,7 @@ export default function CommunityPageNew() {
       }
     }
   }, [searchParams, conversations, setSearchParams]);
+
   useEffect(() => {
     const initCommunityChat = async () => {
       try {
@@ -52,11 +57,14 @@ export default function CommunityPageNew() {
         console.error('Error initializing community chat:', error);
       }
     };
+
     initCommunityChat();
     presenceService.initializePresence();
+
     const unsubscribeConversations = communityChatService.subscribeToConversations((convs) => {
       setConversations(convs);
     });
+
     return () => {
       presenceService.cleanup();
       unsubscribeConversations();
@@ -65,11 +73,13 @@ export default function CommunityPageNew() {
       }
     };
   }, []);
+
   useEffect(() => {
     if (selectedConversation && selectedConversation.id === 'publicRoom') {
       if (moderatorUnsubscribeRef.current) {
         moderatorUnsubscribeRef.current();
       }
+
       moderatorUnsubscribeRef.current = aiModeratorBotService.subscribeToConversationForModeration(
         selectedConversation.id,
         (message) => {
@@ -77,6 +87,7 @@ export default function CommunityPageNew() {
         }
       );
     }
+
     return () => {
       if (moderatorUnsubscribeRef.current) {
         moderatorUnsubscribeRef.current();
@@ -84,8 +95,10 @@ export default function CommunityPageNew() {
       }
     };
   }, [selectedConversation]);
+
   const handleSendMessage = async (message: string, file?: File) => {
     if (!currentUser || !selectedConversation || !message.trim()) return;
+
     setSending(true);
     try {
       await communityChatService.sendMessage(
@@ -102,9 +115,11 @@ export default function CommunityPageNew() {
       setSending(false);
     }
   };
+
   const handleSelectConversation = (conversation: Conversation) => {
     setSelectedConversation(conversation);
   };
+
   const handleNavigateToMessage = (conversationId: string, messageId: string) => {
     const conversation = conversations.find((c) => c.id === conversationId);
     if (conversation) {
@@ -119,7 +134,9 @@ export default function CommunityPageNew() {
       }, 100);
     }
   };
+
   if (!currentUser) return null;
+
   const chatAccess = checkFeatureAccess(currentUser, 'chat');
   if (!chatAccess.allowed) {
     return (
@@ -130,6 +147,7 @@ export default function CommunityPageNew() {
       />
     );
   }
+
   return (
     <ChatLayout
       sidebar={

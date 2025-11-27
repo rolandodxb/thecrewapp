@@ -3,15 +3,19 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Plane, User, Mail, Lock, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { supabase } from '../../lib/auth';
+import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../lib/firebase';
 import { countries } from '../../data/countries';
 import { supabase } from '../../lib/supabase';
 import { referralService } from '../../services/referralService';
+
 export default function RegisterPage() {
   const [searchParams] = useSearchParams();
   const selectedPlan = searchParams.get('plan');
   const priceId = searchParams.get('priceId');
   const referralCode = searchParams.get('ref');
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,13 +26,16 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const { setCurrentUser } = useApp();
   const navigate = useNavigate();
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         email,
@@ -43,6 +50,7 @@ export default function RegisterPage() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
+
       const newUser = {
         uid: user.uid,
         email,
@@ -53,7 +61,9 @@ export default function RegisterPage() {
         bio,
         photoURL: '',
       };
+
       setCurrentUser(newUser);
+
       if (referralCode) {
         try {
           const ipResponse = await fetch('https://api.ipify.org?format=json');
@@ -69,9 +79,11 @@ export default function RegisterPage() {
           // Silent error handling for referral tracking
         }
       }
+
       if (selectedPlan && selectedPlan !== 'free' && priceId) {
         try {
           const { data: { session } } = await supabase.auth.getSession();
+
           const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`, {
             method: 'POST',
             headers: {
@@ -85,7 +97,9 @@ export default function RegisterPage() {
               mode: 'subscription',
             }),
           });
+
           const data = await response.json();
+
           if (data.url) {
             window.location.href = data.url;
             return;
@@ -94,9 +108,11 @@ export default function RegisterPage() {
           // Silent error handling for checkout
         }
       }
+
       navigate('/dashboard');
     } catch (err: any) {
       let errorMessage = 'Registration failed. Please try again.';
+
       if (err.code === 'auth/email-already-in-use') {
         errorMessage = 'This email is already registered. Please sign in.';
       } else if (err.code === 'auth/weak-password') {
@@ -106,20 +122,25 @@ export default function RegisterPage() {
       } else if (err.message) {
         errorMessage = `Error: ${err.message}`;
       }
+
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
+
   const handleGoogleSignUp = async () => {
     setError('');
     setLoading(true);
+
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
+
       const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
+
       if (!userDoc.exists()) {
         await setDoc(userDocRef, {
           uid: user.uid,
@@ -139,7 +160,9 @@ export default function RegisterPage() {
           updatedAt: new Date().toISOString(),
         });
       }
+
       const userData = userDoc.exists() ? userDoc.data() : await getDoc(userDocRef).then(d => d.data());
+
       setCurrentUser({
         uid: user.uid,
         email: userData?.email || user.email,
@@ -157,6 +180,7 @@ export default function RegisterPage() {
         createdAt: userData?.createdAt || new Date().toISOString(),
         updatedAt: userData?.updatedAt || new Date().toISOString(),
       });
+
       if (selectedPlan && selectedPlan !== 'free' && priceId) {
         navigate(`/upgrade?plan=${selectedPlan}&priceId=${priceId}`);
       } else {
@@ -168,6 +192,7 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
+
   return (
     <div className="min-h-screen min-h-screen flex items-center justify-center p-4">
       <motion.div
@@ -183,12 +208,14 @@ export default function RegisterPage() {
               className="h-16 w-auto"
             />
           </div>
+
           <h1 className="text-2xl md:text-3xl font-bold text-center text-gray-900 mb-2">
             Join The Crew Academy
           </h1>
           <p className="text-center text-sm md:text-base text-gray-600 mb-4">
             Start your cabin crew journey
           </p>
+
           {referralCode && (
             <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl p-3 mb-4">
               <p className="text-center text-sm font-semibold text-gray-900">
@@ -199,6 +226,7 @@ export default function RegisterPage() {
               </p>
             </div>
           )}
+
           {selectedPlan && selectedPlan !== 'free' && (
             <div className="bg-gradient-to-r from-[#D71920]/10 to-[#CBA135]/10 border border-[#D71920]/20 rounded-xl p-3 mb-4">
               <p className="text-center text-sm font-semibold text-gray-900">
@@ -209,6 +237,7 @@ export default function RegisterPage() {
               </p>
             </div>
           )}
+
           <form onSubmit={handleRegister} className="space-y-4 md:space-y-5">
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">
@@ -226,6 +255,7 @@ export default function RegisterPage() {
                 />
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">
                 Email Address *
@@ -242,6 +272,7 @@ export default function RegisterPage() {
                 />
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">
                 Password *
@@ -259,6 +290,7 @@ export default function RegisterPage() {
                 />
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">
                 Country *
@@ -280,6 +312,7 @@ export default function RegisterPage() {
                 </select>
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">
                 Brief Description About Yourself
@@ -294,6 +327,7 @@ export default function RegisterPage() {
                 />
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">
                 What I Expect From This Academy
@@ -308,6 +342,7 @@ export default function RegisterPage() {
                 />
               </div>
             </div>
+
             {error && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -317,6 +352,7 @@ export default function RegisterPage() {
                 {error}
               </motion.div>
             )}
+
             <button
               type="submit"
               disabled={loading}
@@ -325,6 +361,7 @@ export default function RegisterPage() {
               {loading ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
+
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -334,6 +371,7 @@ export default function RegisterPage() {
                 <span className="px-2 bg-white text-gray-500">Or continue with</span>
               </div>
             </div>
+
             <button
               type="button"
               onClick={handleGoogleSignUp}
@@ -349,6 +387,7 @@ export default function RegisterPage() {
               Sign up with Google
             </button>
           </div>
+
           <div className="mt-6 text-center">
             <p className="text-gray-600 text-sm">
               Already have an account?{' '}

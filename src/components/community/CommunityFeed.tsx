@@ -4,8 +4,11 @@ import { communityFeedService, CommunityPost, POSTS_PER_PAGE } from '../../servi
 import { MessageCircle, Image as ImageIcon, Plus, Filter, X, Send, Bot, Shield, Package, Users, Lock, Zap, Crown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PostCard from './PostCard';
+import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+
 type Channel = 'all' | 'announcements' | 'general' | 'study-room';
 type FilterType = 'all' | 'images' | 'my-posts';
+
 export default function CommunityFeed() {
   const { currentUser } = useApp();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
@@ -17,6 +20,7 @@ export default function CommunityFeed() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const observerTarget = useRef<HTMLDivElement>(null);
+
   const [formContent, setFormContent] = useState('');
   const [formChannel, setFormChannel] = useState<'announcements' | 'general' | 'study-room'>('general');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -26,9 +30,12 @@ export default function CommunityFeed() {
   const [productLink, setProductLink] = useState('');
   const [targetAudience, setTargetAudience] = useState<'all' | 'free' | 'pro' | 'vip' | 'pro-vip'>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const canTargetAudience = currentUser?.role === 'governor' || currentUser?.role === 'mentor' || currentUser?.role === 'admin';
+
   const loadPosts = useCallback(async (reset: boolean = false) => {
     if (!currentUser) return;
+
     try {
       if (reset) {
         setLoading(true);
@@ -36,24 +43,29 @@ export default function CommunityFeed() {
       } else {
         setLoadingMore(true);
       }
+
       const channel = selectedChannel === 'all' ? undefined : selectedChannel;
       const filters: any = {};
+
       if (selectedFilter === 'images') {
         filters.imagesOnly = true;
       } else if (selectedFilter === 'my-posts') {
         filters.userId = currentUser.uid;
       }
+
       const { posts: newPosts, lastDoc: newLastDoc } = await communityFeedService.getPosts(
         channel,
         reset ? undefined : lastDoc || undefined,
         filters
       );
+
       // Don't filter posts - show all posts (locked state handled in PostCard)
       if (reset) {
         setPosts(newPosts);
       } else {
         setPosts(prev => [...prev, ...newPosts]);
       }
+
       setLastDoc(newLastDoc);
       setHasMore(newPosts.length === POSTS_PER_PAGE);
     } catch (error) {
@@ -63,9 +75,11 @@ export default function CommunityFeed() {
       setLoadingMore(false);
     }
   }, [currentUser, selectedChannel, selectedFilter, lastDoc]);
+
   useEffect(() => {
     loadPosts(true);
   }, [selectedChannel, selectedFilter]);
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => {
@@ -75,16 +89,19 @@ export default function CommunityFeed() {
       },
       { threshold: 0.1 }
     );
+
     const currentTarget = observerTarget.current;
     if (currentTarget) {
       observer.observe(currentTarget);
     }
+
     return () => {
       if (currentTarget) {
         observer.unobserve(currentTarget);
       }
     };
   }, [hasMore, loadingMore, loading, loadPosts]);
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -96,6 +113,7 @@ export default function CommunityFeed() {
       reader.readAsDataURL(file);
     }
   };
+
   const handleRemoveImage = () => {
     setImageFile(null);
     setImagePreview(null);
@@ -103,13 +121,16 @@ export default function CommunityFeed() {
       fileInputRef.current.value = '';
     }
   };
+
   const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formContent.trim() || submitting) return;
+
     if (postType === 'product' && !productLink.trim()) {
       alert('Please enter a product ID');
       return;
     }
+
     setSubmitting(true);
     try {
       await communityFeedService.createPost(
@@ -123,6 +144,7 @@ export default function CommunityFeed() {
         postType === 'product' ? productLink.trim() : undefined,
         canTargetAudience ? targetAudience : 'all'
       );
+
       setFormContent('');
       setFormChannel('general');
       setImageFile(null);
@@ -139,34 +161,42 @@ export default function CommunityFeed() {
       setSubmitting(false);
     }
   };
+
   const handlePostDeleted = () => {
     loadPosts(true);
   };
+
   const canPost = () => {
     // Block free users from posting
     if (currentUser?.plan === 'free') return false;
+
     if (selectedChannel === 'announcements') {
       return currentUser?.role === 'governor' || currentUser?.role === 'admin';
     }
     return true;
   };
+
   const canSelectAnnouncements = currentUser?.role === 'governor' || currentUser?.role === 'admin';
+
   const channels = [
     { id: 'all' as Channel, label: 'All Posts', icon: '📱' },
     { id: 'announcements' as Channel, label: 'Announcements', icon: '📢' },
     { id: 'general' as Channel, label: 'General', icon: '💬' },
     { id: 'study-room' as Channel, label: 'Study Room', icon: '📚' }
   ];
+
   const filters = [
     { id: 'all' as FilterType, label: 'All', icon: Filter },
     { id: 'images' as FilterType, label: 'Images', icon: ImageIcon },
     { id: 'my-posts' as FilterType, label: 'My Posts', icon: MessageCircle }
   ];
+
   const postChannels = [
     ...(canSelectAnnouncements ? [{ id: 'announcements' as const, label: 'Announcements', icon: '📢', description: 'Important updates' }] : []),
     { id: 'general' as const, label: 'General', icon: '💬', description: 'General discussions' },
     { id: 'study-room' as const, label: 'Study Room', icon: '📚', description: 'Study & learning' }
   ];
+
   if (!currentUser) {
     return (
       <div className="absolute inset-0 flex items-center justify-center">
@@ -174,6 +204,7 @@ export default function CommunityFeed() {
       </div>
     );
   }
+
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-6">
@@ -196,6 +227,7 @@ export default function CommunityFeed() {
                 </motion.button>
               )}
             </div>
+
             <div className="border-t border-gray-200 pt-3">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Channels</span>
@@ -218,6 +250,7 @@ export default function CommunityFeed() {
                   </motion.button>
                 ))}
               </div>
+
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Filters</span>
               </div>
@@ -243,6 +276,7 @@ export default function CommunityFeed() {
                 })}
               </div>
             </div>
+
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -263,6 +297,7 @@ export default function CommunityFeed() {
                 </div>
               </div>
             </motion.div>
+
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -285,6 +320,7 @@ export default function CommunityFeed() {
               </div>
             </motion.div>
           </div>
+
           <AnimatePresence>
             {showCreateForm && (
               <motion.div
@@ -304,6 +340,7 @@ export default function CommunityFeed() {
                       <X className="w-5 h-5 text-gray-600" />
                     </button>
                   </div>
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-bold text-gray-700 mb-2">Post Type *</label>
@@ -340,6 +377,7 @@ export default function CommunityFeed() {
                         </button>
                       </div>
                     </div>
+
                     <div>
                       <label className="block text-sm font-bold text-gray-700 mb-2">Channel *</label>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -392,6 +430,7 @@ export default function CommunityFeed() {
                         </button>
                       </div>
                     </div>
+
                     {canTargetAudience && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
@@ -419,6 +458,7 @@ export default function CommunityFeed() {
                             </div>
                             <p className="text-[10px] text-gray-600">Everyone can see</p>
                           </button>
+
                           <button
                             type="button"
                             onClick={() => setTargetAudience('free')}
@@ -434,6 +474,7 @@ export default function CommunityFeed() {
                             </div>
                             <p className="text-[10px] text-gray-600">Free users only</p>
                           </button>
+
                           <button
                             type="button"
                             onClick={() => setTargetAudience('pro')}
@@ -449,6 +490,7 @@ export default function CommunityFeed() {
                             </div>
                             <p className="text-[10px] text-gray-600">Pro subscribers</p>
                           </button>
+
                           <button
                             type="button"
                             onClick={() => setTargetAudience('vip')}
@@ -464,6 +506,7 @@ export default function CommunityFeed() {
                             </div>
                             <p className="text-[10px] text-gray-600">VIP members</p>
                           </button>
+
                           <button
                             type="button"
                             onClick={() => setTargetAudience('pro-vip')}
@@ -486,6 +529,7 @@ export default function CommunityFeed() {
                         </p>
                       </div>
                     )}
+
                     <div>
                       <label className="block text-sm font-bold text-gray-700 mb-2">Content *</label>
                       <textarea
@@ -497,6 +541,7 @@ export default function CommunityFeed() {
                         required
                       />
                     </div>
+
                     {postType === 'product' && (
                       <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">Product ID *</label>
@@ -513,6 +558,7 @@ export default function CommunityFeed() {
                         </p>
                       </div>
                     )}
+
                     <div>
                       <label className="block text-sm font-bold text-gray-700 mb-2">Image (Optional)</label>
                       <input
@@ -545,6 +591,7 @@ export default function CommunityFeed() {
                         </button>
                       )}
                     </div>
+
                     <div className="flex flex-col sm:flex-row gap-3 pt-2">
                       <button
                         type="submit"
@@ -576,6 +623,7 @@ export default function CommunityFeed() {
               </motion.div>
             )}
           </AnimatePresence>
+
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-10 w-10 md:h-12 md:w-12 border-4 border-[#D71920] border-t-transparent"></div>
@@ -598,6 +646,7 @@ export default function CommunityFeed() {
                   />
                 ))}
               </AnimatePresence>
+
               {hasMore && (
                 <div ref={observerTarget} className="py-6 md:py-8 flex justify-center">
                   {loadingMore && (

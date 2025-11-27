@@ -2,13 +2,16 @@ import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Terminal, Send, AlertCircle, HelpCircle } from 'lucide-react';
 import { useApp } from '../../../context/AppContext';
-import { supabase } from '../../../lib/auth';
+import { doc, updateDoc, getDoc, setDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../../../lib/firebase';
 import { auditLogService } from '../../../services/auditLogService';
+
 interface CommandResponse {
   success: boolean;
   message: string;
   timestamp: Date;
 }
+
 const COMMANDS = {
   '/help': 'Show all available commands',
   '/user ban <email>': 'Ban a user by email',
@@ -23,6 +26,7 @@ const COMMANDS = {
   '/stats courses': 'Show course statistics',
   '/clear': 'Clear console output',
 };
+
 export default function CommandConsole() {
   const { currentUser } = useApp();
   const [command, setCommand] = useState('');
@@ -32,44 +36,56 @@ export default function CommandConsole() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [showHelp, setShowHelp] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
   const isGovernor = currentUser?.role === 'governor';
+
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
     }
   }, []);
+
   const addResponse = (success: boolean, message: string) => {
     setResponses((prev) => [{ success, message, timestamp: new Date() }, ...prev]);
   };
+
   const executeCommand = async (cmd: string) => {
     const parts = cmd.toLowerCase().trim().split(' ');
     const mainCmd = parts[0];
+
     if (!currentUser) {
       addResponse(false, 'User not authenticated');
       return;
     }
+
     try {
       switch (mainCmd) {
         case '/help':
           setShowHelp(true);
           addResponse(true, 'Showing command help panel');
           break;
+
         case '/clear':
           setResponses([]);
           addResponse(true, 'Console cleared');
           break;
+
         case '/user':
           await handleUserCommand(parts.slice(1));
           break;
+
         case '/system':
           await handleSystemCommand(parts.slice(1));
           break;
+
         case '/feature':
           await handleFeatureCommand(parts.slice(1));
           break;
+
         case '/stats':
           await handleStatsCommand(parts.slice(1));
           break;
+
         default:
           addResponse(false, `Unknown command: ${mainCmd}. Type /help for available commands.`);
       }
@@ -77,43 +93,53 @@ export default function CommandConsole() {
       addResponse(false, `Error: ${error.message}`);
     }
   };
+
   const handleUserCommand = async (args: string[]) => {
     const action = args[0];
     const email = args[1];
+
     if (!email) {
       addResponse(false, 'Email required. Usage: /user <action> <email>');
       return;
     }
+
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('email', '==', email));
     const snapshot = await getDocs(q);
+
     if (snapshot.empty) {
       addResponse(false, `User not found: ${email}`);
       return;
     }
+
     const userDoc = snapshot.docs[0];
     const userRef = doc(db, 'users', userDoc.id);
+
     switch (action) {
       case 'ban':
         await updateDoc(userRef, { banned: true });
         await auditLogService.log(currentUser!.uid, currentUser!.email, `Banned user ${email}`, 'admin_action', { targetEmail: email });
         addResponse(true, `User ${email} has been banned`);
         break;
+
       case 'unban':
         await updateDoc(userRef, { banned: false });
         await auditLogService.log(currentUser!.uid, currentUser!.email, `Unbanned user ${email}`, 'admin_action', { targetEmail: email });
         addResponse(true, `User ${email} has been unbanned`);
         break;
+
       case 'mute':
         await updateDoc(userRef, { muted: true });
         await auditLogService.log(currentUser!.uid, currentUser!.email, `Muted user ${email}`, 'moderation', { targetEmail: email });
         addResponse(true, `User ${email} has been muted`);
         break;
+
       case 'unmute':
         await updateDoc(userRef, { muted: false });
         await auditLogService.log(currentUser!.uid, currentUser!.email, `Unmuted user ${email}`, 'moderation', { targetEmail: email });
         addResponse(true, `User ${email} has been unmuted`);
         break;
+
       case 'promote':
         const newRole = args[2];
         if (!['student', 'crew', 'mentor', 'governor'].includes(newRole)) {
@@ -124,35 +150,45 @@ export default function CommandConsole() {
         await auditLogService.log(currentUser!.uid, currentUser!.email, `Changed ${email} role to ${newRole}`, 'role_change', { targetEmail: email, newRole });
         addResponse(true, `User ${email} promoted to ${newRole}`);
         break;
+
       default:
         addResponse(false, `Unknown user action: ${action}`);
     }
   };
+
   const handleSystemCommand = async (args: string[]) => {
     const action = args[0];
+
     switch (action) {
       case 'clear-cache':
         addResponse(true, 'System cache cleared (simulated)');
         await auditLogService.log(currentUser!.uid, currentUser!.email, 'Cleared system cache', 'system', {});
         break;
+
       default:
         addResponse(false, `Unknown system action: ${action}`);
     }
   };
+
   const handleFeatureCommand = async (args: string[]) => {
     const action = args[0];
     const featureName = args.slice(1).join(' ');
+
     if (!featureName) {
       addResponse(false, 'Feature name required. Usage: /feature <enable|disable> <name>');
       return;
     }
+
     const controlRef = doc(db, 'systemControl', 'status');
     const controlDoc = await getDoc(controlRef);
+
     if (!controlDoc.exists()) {
       addResponse(false, 'System control document not found');
       return;
     }
+
     const features = controlDoc.data().features || {};
+
     switch (action) {
       case 'disable':
         features[featureName] = { enabled: false };
@@ -160,18 +196,22 @@ export default function CommandConsole() {
         await auditLogService.log(currentUser!.uid, currentUser!.email, `Disabled feature: ${featureName}`, 'feature_shutdown', { feature: featureName });
         addResponse(true, `Feature "${featureName}" disabled`);
         break;
+
       case 'enable':
         features[featureName] = { enabled: true };
         await updateDoc(controlRef, { features });
         await auditLogService.log(currentUser!.uid, currentUser!.email, `Enabled feature: ${featureName}`, 'feature_shutdown', { feature: featureName });
         addResponse(true, `Feature "${featureName}" enabled`);
         break;
+
       default:
         addResponse(false, `Unknown feature action: ${action}`);
     }
   };
+
   const handleStatsCommand = async (args: string[]) => {
     const type = args[0];
+
     switch (type) {
       case 'users':
         const usersSnapshot = await getDocs(collection(db, 'users'));
@@ -183,21 +223,26 @@ export default function CommandConsole() {
         const statsMsg = `Total Users: ${usersSnapshot.size}\n${Object.entries(usersByRole).map(([role, count]) => `  ${role}: ${count}`).join('\n')}`;
         addResponse(true, statsMsg);
         break;
+
       case 'courses':
         const coursesSnapshot = await getDocs(collection(db, 'courses'));
         const published = coursesSnapshot.docs.filter(doc => doc.data().published).length;
         addResponse(true, `Total Courses: ${coursesSnapshot.size}\nPublished: ${published}\nDrafts: ${coursesSnapshot.size - published}`);
         break;
+
       default:
         addResponse(false, `Unknown stats type: ${type}. Use: users, courses`);
     }
   };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!command.trim() || !isGovernor) return;
+
     setLoading(true);
     setHistory(prev => [command, ...prev.slice(0, 49)]);
     setHistoryIndex(-1);
+
     try {
       await executeCommand(command);
       setCommand('');
@@ -207,6 +252,7 @@ export default function CommandConsole() {
       setLoading(false);
     }
   };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -227,6 +273,7 @@ export default function CommandConsole() {
       }
     }
   };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -248,6 +295,7 @@ export default function CommandConsole() {
           </span>
         )}
       </div>
+
       {!isGovernor && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-300 rounded-lg flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
@@ -256,6 +304,7 @@ export default function CommandConsole() {
           </p>
         </div>
       )}
+
       {showHelp && (
         <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
           <h3 className="font-bold text-blue-900 mb-2">Available Commands:</h3>
@@ -269,6 +318,7 @@ export default function CommandConsole() {
           </div>
         </div>
       )}
+
       <form onSubmit={handleSubmit} className="mb-4">
         <div className="flex flex-col sm:flex-row gap-2">
           <input
@@ -295,6 +345,7 @@ export default function CommandConsole() {
           </button>
         </div>
       </form>
+
       <div className="space-y-2 max-h-96 overflow-y-auto">
         {responses.length === 0 ? (
           <div className="text-center py-8 glass-light rounded-xl border-2 border-gray-200">

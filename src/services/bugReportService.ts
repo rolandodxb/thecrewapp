@@ -1,7 +1,10 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import { collection, addDoc, getDocs, query, orderBy, doc, updateDoc, where, Timestamp, getDoc } from 'firebase/firestore';
 import { notifyBugReportComment, notifyBugReportStatus } from './notificationService';
+
 export type BugStatus = 'open' | 'in-progress' | 'escalated' | 'resolved' | 'closed';
 export type BugPriority = 'low' | 'medium' | 'high' | 'critical';
+
 export interface BugReport {
   id?: string;
   title: string;
@@ -21,6 +24,7 @@ export interface BugReport {
   screenshots?: string[];
   responses?: BugResponse[];
 }
+
 export interface BugResponse {
   id: string;
   userId: string;
@@ -29,6 +33,7 @@ export interface BugResponse {
   message: string;
   createdAt: any;
 }
+
 export const createBugReport = async (
   report: Omit<BugReport, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'escalatedToGovernor'>
 ): Promise<string> => {
@@ -41,6 +46,7 @@ export const createBugReport = async (
       updatedAt: Timestamp.now(),
       responses: []
     };
+
     const docRef = await addDoc(collection(db, 'bugReports'), bugReport);
     return docRef.id;
   } catch (error) {
@@ -48,10 +54,12 @@ export const createBugReport = async (
     throw error;
   }
 };
+
 export const getAllBugReports = async (): Promise<BugReport[]> => {
   try {
     const q = query(collection(db, 'bugReports'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
+
     const reports: BugReport[] = [];
     querySnapshot.forEach((doc) => {
       reports.push({
@@ -59,26 +67,31 @@ export const getAllBugReports = async (): Promise<BugReport[]> => {
         ...doc.data()
       } as BugReport);
     });
+
     return reports;
   } catch (error) {
     console.error('Error fetching bug reports:', error);
     return [];
   }
 };
+
 export const getBugReportsByRole = async (userRole: string): Promise<BugReport[]> => {
   try {
     const allReports = await getAllBugReports();
+
     if (userRole === 'governor') {
       return allReports;
     } else if (userRole === 'mentor') {
       return allReports.filter(report => !report.escalatedToGovernor || report.assignedTo);
     }
+
     return [];
   } catch (error) {
     console.error('Error fetching bug reports by role:', error);
     return [];
   }
 };
+
 export const updateBugReportStatus = async (
   reportId: string,
   status: BugStatus,
@@ -88,20 +101,26 @@ export const updateBugReportStatus = async (
   try {
     const reportRef = doc(db, 'bugReports', reportId);
     const reportSnap = await getDoc(reportRef);
+
     if (!reportSnap.exists()) return;
+
     const reportData = reportSnap.data();
     const updateData: any = {
       status,
       updatedAt: Timestamp.now()
     };
+
     if (assignedTo) {
       updateData.assignedTo = assignedTo;
       updateData.assignedToName = assignedToName;
     }
+
     if (status === 'resolved' || status === 'closed') {
       updateData.resolvedAt = Timestamp.now();
     }
+
     await updateDoc(reportRef, updateData);
+
     await notifyBugReportStatus(
       reportData.reportedBy,
       reportId,
@@ -113,6 +132,7 @@ export const updateBugReportStatus = async (
     throw error;
   }
 };
+
 export const escalateBugReport = async (
   reportId: string,
   escalatedBy: string,
@@ -125,6 +145,7 @@ export const escalateBugReport = async (
       status: 'escalated',
       updatedAt: Timestamp.now()
     });
+
     await addResponseToBugReport(reportId, {
       id: Date.now().toString(),
       userId: escalatedBy,
@@ -138,6 +159,7 @@ export const escalateBugReport = async (
     throw error;
   }
 };
+
 export const addResponseToBugReport = async (
   reportId: string,
   response: BugResponse
@@ -145,11 +167,14 @@ export const addResponseToBugReport = async (
   try {
     const reportRef = doc(db, 'bugReports', reportId);
     const reportSnap = await getDoc(reportRef);
+
     if (!reportSnap.exists()) {
       throw new Error('Bug report not found');
     }
+
     const currentData = reportSnap.data();
     const responses = currentData.responses || [];
+
     await updateDoc(reportRef, {
       responses: [...responses, {
         ...response,
@@ -157,7 +182,9 @@ export const addResponseToBugReport = async (
       }],
       updatedAt: Timestamp.now()
     });
+
     console.log('Response added successfully to bug report:', reportId);
+
     if (response.userId !== currentData.reportedBy) {
       await notifyBugReportComment(
         currentData.reportedBy,

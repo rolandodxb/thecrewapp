@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { DollarSign, TrendingUp, Users, AlertTriangle, Download, RefreshCw, CreditCard } from 'lucide-react';
-import { supabase } from '../../../lib/auth';
+import { collection, query, onSnapshot, orderBy, limit, where } from 'firebase/firestore';
+import { db } from '../../../lib/firebase';
+
 interface StripeCustomer {
   id: string;
   email: string;
   name: string;
   created: number;
 }
+
 interface StripeSubscription {
   id: string;
   customer: string;
@@ -18,6 +21,7 @@ interface StripeSubscription {
     interval: string;
   };
 }
+
 interface StripeInvoice {
   id: string;
   customer: string;
@@ -25,63 +29,70 @@ interface StripeInvoice {
   status: string;
   created: number;
 }
+
 export default function FinancePanel() {
   const [customers, setCustomers] = useState<StripeCustomer[]>([]);
   const [subscriptions, setSubscriptions] = useState<StripeSubscription[]>([]);
   const [invoices, setInvoices] = useState<StripeInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'customers' | 'subscriptions' | 'invoices' | 'dashboard'>('overview');
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [customersRes, subscriptionsRes, invoicesRes] = await Promise.all([
-          supabase.from('stripe_customers').select('*').order('created', { ascending: false }).limit(50),
-          supabase.from('stripe_subscriptions').select('*').eq('status', 'active').order('created', { ascending: false }).limit(50),
-          supabase.from('stripe_invoices').select('*').order('created', { ascending: false }).limit(50)
-        ]);
+    const unsubscribers: (() => void)[] = [];
 
-        if (customersRes.data) setCustomers(customersRes.data as StripeCustomer[]);
-        if (subscriptionsRes.data) setSubscriptions(subscriptionsRes.data as StripeSubscription[]);
-        if (invoicesRes.data) setInvoices(invoicesRes.data as StripeInvoice[]);
-      } catch (error) {
-        console.error('Error loading financial data:', error);
-      } finally {
+    const customersQuery = query(
+      collection(db, 'stripe', 'customers', 'list'),
+      orderBy('created', 'desc'),
+      limit(50)
+    );
+
+    const subscriptionsQuery = query(
+      collection(db, 'stripe', 'subscriptions', 'list'),
+      where('status', '==', 'active'),
+      orderBy('created', 'desc'),
+      limit(50)
+    );
+
+    const invoicesQuery = query(
+      collection(db, 'stripe', 'invoices', 'list'),
+      orderBy('created', 'desc'),
+      limit(50)
+    );
+
+    unsubscribers.push(
+      onSnapshot(customersQuery, (snapshot) => {
+        const data = snapshot.docs.map(doc => doc.data() as StripeCustomer);
+        setCustomers(data);
         setLoading(false);
-      }
-    };
-
-    fetchData();
-
-    const customersChannel = supabase
-      .channel('stripe-customers')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stripe_customers' }, () => {
-        supabase.from('stripe_customers').select('*').order('created', { ascending: false }).limit(50)
-          .then(res => { if (res.data) setCustomers(res.data as StripeCustomer[]); });
+      }, (error) => {
+        console.error('Error loading customers:', error);
+        setLoading(false);
       })
-      .subscribe();
+    );
 
-    const subscriptionsChannel = supabase
-      .channel('stripe-subscriptions')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stripe_subscriptions' }, () => {
-        supabase.from('stripe_subscriptions').select('*').eq('status', 'active').order('created', { ascending: false }).limit(50)
-          .then(res => { if (res.data) setSubscriptions(res.data as StripeSubscription[]); });
+    unsubscribers.push(
+      onSnapshot(subscriptionsQuery, (snapshot) => {
+        const data = snapshot.docs.map(doc => doc.data() as StripeSubscription);
+        setSubscriptions(data);
+      }, (error) => {
+        console.error('Error loading subscriptions:', error);
       })
-      .subscribe();
+    );
 
-    const invoicesChannel = supabase
-      .channel('stripe-invoices')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stripe_invoices' }, () => {
-        supabase.from('stripe_invoices').select('*').order('created', { ascending: false }).limit(50)
-          .then(res => { if (res.data) setInvoices(res.data as StripeInvoice[]); });
+    unsubscribers.push(
+      onSnapshot(invoicesQuery, (snapshot) => {
+        const data = snapshot.docs.map(doc => doc.data() as StripeInvoice);
+        setInvoices(data);
+      }, (error) => {
+        console.error('Error loading invoices:', error);
       })
-      .subscribe();
+    );
 
     return () => {
-      supabase.removeChannel(customersChannel);
-      supabase.removeChannel(subscriptionsChannel);
-      supabase.removeChannel(invoicesChannel);
+      unsubscribers.forEach(unsub => unsub());
     };
   }, []);
+
   const calculateMRR = () => {
     return subscriptions.reduce((total, sub) => {
       if (sub.status === 'active' && sub.plan) {
@@ -93,15 +104,18 @@ export default function FinancePanel() {
       return total;
     }, 0) / 100;
   };
+
   const calculateTodayRevenue = () => {
     const today = new Date().setHours(0, 0, 0, 0) / 1000;
     return invoices
       .filter(inv => inv.status === 'paid' && inv.created >= today)
       .reduce((total, inv) => total + inv.amount_paid, 0) / 100;
   };
+
   const getFailedPayments = () => {
     return invoices.filter(inv => inv.status === 'failed').length;
   };
+
   if (loading) {
     return (
       <motion.div
@@ -118,6 +132,7 @@ export default function FinancePanel() {
       </motion.div>
     );
   }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -141,6 +156,7 @@ export default function FinancePanel() {
           </button>
         </div>
       </div>
+
       <div className="border-b border-gray-200">
         <div className="flex gap-4 px-6">
           <button
@@ -195,6 +211,7 @@ export default function FinancePanel() {
           </button>
         </div>
       </div>
+
       <div className="p-6">
         {activeTab === 'overview' && (
           <div className="space-y-4">
@@ -207,6 +224,7 @@ export default function FinancePanel() {
                 <p className="text-2xl font-bold text-gray-900">${calculateMRR().toFixed(2)}</p>
                 <p className="text-xs text-gray-500 mt-1">Monthly Recurring</p>
               </div>
+
               <div className="glass-light/50 rounded-xl p-4 border border-gray-200">
                 <div className="flex items-center gap-2 mb-2">
                   <DollarSign className="w-4 h-4 text-blue-400" />
@@ -215,6 +233,7 @@ export default function FinancePanel() {
                 <p className="text-2xl font-bold text-gray-900">${calculateTodayRevenue().toFixed(2)}</p>
                 <p className="text-xs text-gray-500 mt-1">Revenue Today</p>
               </div>
+
               <div className="glass-light/50 rounded-xl p-4 border border-gray-200">
                 <div className="flex items-center gap-2 mb-2">
                   <Users className="w-4 h-4 text-[#5A6B75]" />
@@ -223,6 +242,7 @@ export default function FinancePanel() {
                 <p className="text-2xl font-bold text-gray-900">{subscriptions.length}</p>
                 <p className="text-xs text-gray-500 mt-1">Subscriptions</p>
               </div>
+
               <div className="glass-light/50 rounded-xl p-4 border border-gray-200">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle className="w-4 h-4 text-red-600" />
@@ -232,6 +252,7 @@ export default function FinancePanel() {
                 <p className="text-xs text-gray-500 mt-1">Payments</p>
               </div>
             </div>
+
             {customers.length === 0 && subscriptions.length === 0 && (
               <div className="text-center py-8">
                 <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-3" />
@@ -241,6 +262,7 @@ export default function FinancePanel() {
             )}
           </div>
         )}
+
         {activeTab === 'customers' && (
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {customers.length === 0 ? (
@@ -262,6 +284,7 @@ export default function FinancePanel() {
             )}
           </div>
         )}
+
         {activeTab === 'subscriptions' && (
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {subscriptions.length === 0 ? (
@@ -287,6 +310,7 @@ export default function FinancePanel() {
             )}
           </div>
         )}
+
         {activeTab === 'invoices' && (
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {invoices.length === 0 ? (
@@ -318,6 +342,7 @@ export default function FinancePanel() {
             )}
           </div>
         )}
+
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
@@ -342,6 +367,7 @@ export default function FinancePanel() {
                 </div>
               </div>
             </div>
+
             <div className="glass-light rounded-xl border border-gray-200 p-12 text-center" style={{ height: '600px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div>
                 <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl">

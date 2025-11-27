@@ -8,8 +8,10 @@ import CreateModuleForm from '../components/CreateModuleForm';
 import NewCourseForm from '../components/NewCourseForm';
 import { useApp } from '../context/AppContext';
 import { updateLastAccessed, isEnrolledInModule } from '../services/enrollmentService';
-import { supabase } from '../lib/auth';
+import { doc, getDoc, query, collection, where, getDocs } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import ModuleExamTrigger from '../components/ModuleExamTrigger';
+
 export default function MainModuleViewerPage() {
   const { moduleId } = useParams<{ moduleId: string }>();
   const navigate = useNavigate();
@@ -22,32 +24,43 @@ export default function MainModuleViewerPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showAddCourse, setShowAddCourse] = useState(false);
+
   const isAdmin = currentUser?.role === 'mentor' || currentUser?.role === 'governor';
+
   useEffect(() => {
     if (moduleId) {
       loadModuleData();
     }
   }, [moduleId]);
+
   const loadModuleData = async () => {
     if (!moduleId) return;
+
     try {
       console.log('MainModuleViewer: Loading module:', moduleId);
       console.log('MainModuleViewer: Current user:', currentUser?.email, 'isAdmin:', isAdmin);
+
       const module = await getMainModule(moduleId);
       setMainModule(module);
+
       if (module) {
         console.log('MainModuleViewer: Skipping enrollment check - allowing all users to view modules');
+
         if (currentUser && moduleId) {
           await updateLastAccessed(currentUser.uid, moduleId);
         }
+
         const submodulesFromModule = module.submodules || [];
         setSubmodules(submodulesFromModule);
+
         const courseIds: string[] = [];
         if (module.course_id) courseIds.push(module.course_id);
         if (module.course1_id) courseIds.push(module.course1_id);
         if (module.course2_id) courseIds.push(module.course2_id);
+
         console.log('MainModuleViewer: Module data:', module);
         console.log('MainModuleViewer: Course IDs found:', courseIds);
+
         if (courseIds.length > 0) {
           const coursesData = await Promise.all(
             courseIds.map(async (courseId) => {
@@ -62,11 +75,14 @@ export default function MainModuleViewerPage() {
               return null;
             })
           );
+
           const validCourses = coursesData.filter(c => c !== null) as Course[];
           console.log('MainModuleViewer: Valid courses:', validCourses);
           setCourses(validCourses);
+
           if (currentUser && validCourses.length > 0) {
             await loadCourseCompletionStatus(validCourses.map(c => c.id));
+
             // Calculate module progress
             const progress = await calculateModuleProgress(currentUser.uid, courseIds);
             setModuleProgress(progress);
@@ -82,16 +98,21 @@ export default function MainModuleViewerPage() {
       setLoading(false);
     }
   };
+
   const loadCourseCompletionStatus = async (courseIds: string[]) => {
     if (!currentUser) return;
+
     const statusMap: Record<string, { completed: boolean; examPassed: boolean }> = {};
+
     for (const courseId of courseIds) {
       const progressRef = doc(db, 'course_progress', `${currentUser.uid}_${courseId}`);
       const progressSnap = await getDoc(progressRef);
       const completed = progressSnap.exists() && progressSnap.data().completed === true;
+
       const examsRef = collection(db, 'exams');
       const examQuery = query(examsRef, where('courseId', '==', courseId));
       const examSnapshot = await getDocs(examQuery);
+
       let examPassed = false;
       if (!examSnapshot.empty) {
         const exam = examSnapshot.docs[0];
@@ -102,10 +123,13 @@ export default function MainModuleViewerPage() {
       } else {
         examPassed = true;
       }
+
       statusMap[courseId] = { completed, examPassed };
     }
+
     setCourseCompletionStatus(statusMap);
   };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -113,6 +137,7 @@ export default function MainModuleViewerPage() {
       </div>
     );
   }
+
   if (!mainModule) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
@@ -127,6 +152,7 @@ export default function MainModuleViewerPage() {
       </div>
     );
   }
+
   return (
     <div className="min-h-screen pb-8">
       <div className="max-w-6xl mx-auto">
@@ -137,6 +163,7 @@ export default function MainModuleViewerPage() {
           <ArrowLeft className="w-5 h-5" />
           Back to {isAdmin ? 'Dashboard' : 'Courses'}
         </button>
+
         <div className="glass-card overflow-hidden mb-8">
           {mainModule.coverImage && (
             <img
@@ -148,6 +175,7 @@ export default function MainModuleViewerPage() {
           <div className="p-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">{mainModule.title}</h1>
             <p className="text-lg text-gray-600 mb-6 leading-relaxed">{mainModule.description}</p>
+
             {currentUser && moduleProgress.totalCount > 0 && (
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-2">
@@ -164,6 +192,7 @@ export default function MainModuleViewerPage() {
                 </div>
               </div>
             )}
+
             {isAdmin && (
               <div className="flex flex-wrap gap-3">
                 <button
@@ -184,6 +213,7 @@ export default function MainModuleViewerPage() {
             )}
           </div>
         </div>
+
         {currentUser && moduleId && mainModule && courses.length > 0 && (
           <ModuleExamTrigger
             userId={currentUser.uid}
@@ -192,6 +222,7 @@ export default function MainModuleViewerPage() {
             moduleName={mainModule.title}
           />
         )}
+
         {courses.length > 0 && (
           <div className="mb-8">
             <div className="mb-6">
@@ -205,6 +236,7 @@ export default function MainModuleViewerPage() {
               {courses.map((course) => {
                 const status = courseCompletionStatus[course.id];
                 const isCompleted = status?.completed && status?.examPassed;
+
                 return (
                   <motion.div
                     key={course.id}
@@ -260,6 +292,7 @@ export default function MainModuleViewerPage() {
             </div>
           </div>
         )}
+
         {submodules.length > 0 && (
           <div className="mb-8">
             <div className="mb-6">
@@ -308,6 +341,7 @@ export default function MainModuleViewerPage() {
             </div>
           </div>
         )}
+
         {courses.length === 0 && submodules.length === 0 && (
           <div className="glass-card p-12 text-center">
             <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -338,6 +372,7 @@ export default function MainModuleViewerPage() {
             )}
           </div>
         )}
+
         {isAdmin && (
           <>
             <CreateModuleForm
@@ -345,6 +380,7 @@ export default function MainModuleViewerPage() {
               onClose={() => setShowCreateForm(false)}
               onSuccess={loadModuleData}
             />
+
             <NewCourseForm
               isOpen={showAddCourse}
               onClose={() => setShowAddCourse(false)}

@@ -1,48 +1,49 @@
-import { supabase } from '../lib/auth';
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { storage } from '../lib/firebase';
 
 export const uploadPDFToStorage = async (file: File, courseId: string): Promise<{ url: string; path: string }> => {
   try {
     console.log('Starting PDF upload...', { fileName: file.name, size: file.size, courseId });
+
     const timestamp = Date.now();
     const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const path = `courses/${courseId}/${timestamp}_${sanitizedFileName}`;
+    const storageRef = ref(storage, path);
 
-    const { data, error } = await supabase.storage
-      .from('course-files')
-      .upload(path, file, {
-        contentType: 'application/pdf',
-        upsert: false
-      });
+    console.log('Uploading to path:', path);
 
-    if (error) throw error;
+    const uploadResult = await uploadBytes(storageRef, file, {
+      contentType: 'application/pdf',
+    });
 
-    console.log('Upload complete, getting public URL...');
+    console.log('Upload complete, getting download URL...');
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('course-files')
-      .getPublicUrl(path);
+    const url = await getDownloadURL(storageRef);
 
-    console.log('Public URL retrieved:', publicUrl);
+    console.log('Download URL retrieved:', url);
 
-    return { url: publicUrl, path };
+    return { url, path };
   } catch (error: any) {
-    console.error('Error uploading PDF to Supabase Storage:', error);
-    if (error.statusCode === 401) {
-      throw new Error('Permission denied. Please check Supabase Storage policies.');
+    console.error('Error uploading PDF to Firebase Storage:', error);
+
+    if (error.code === 'storage/unauthorized') {
+      throw new Error('Permission denied. Please check Firebase Storage rules.');
+    } else if (error.code === 'storage/canceled') {
+      throw new Error('Upload was canceled.');
+    } else if (error.code === 'storage/unknown') {
+      throw new Error('Unknown error occurred during upload. Check your internet connection.');
     }
+
     throw new Error(error.message || 'Failed to upload PDF. Please try again.');
   }
 };
 
 export const deletePDFFromStorage = async (path: string): Promise<void> => {
   try {
-    const { error } = await supabase.storage
-      .from('course-files')
-      .remove([path]);
-
-    if (error) throw error;
+    const storageRef = ref(storage, path);
+    await deleteObject(storageRef);
   } catch (error) {
-    console.error('Error deleting PDF from Supabase Storage:', error);
+    console.error('Error deleting PDF from Firebase Storage:', error);
   }
 };
 

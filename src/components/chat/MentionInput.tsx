@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, KeyboardEvent, ChangeEvent } from 'react';
-import { supabase } from '../../lib/auth';
+import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { User, AtSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
 interface UserProfile {
   uid: string;
   name: string;
@@ -11,6 +13,7 @@ interface UserProfile {
   role?: string;
   plan?: string;
 }
+
 interface MentionInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -20,6 +23,7 @@ interface MentionInputProps {
   onTyping?: () => void;
   conversationMembers?: string[];
 }
+
 export default function MentionInput({
   value,
   onChange,
@@ -37,13 +41,16 @@ export default function MentionInput({
   const [showUserCard, setShowUserCard] = useState<UserProfile | null>(null);
   const [cardPosition, setCardPosition] = useState({ x: 0, y: 0 });
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
   useEffect(() => {
     const checkForMention = async () => {
       const cursorPosition = inputRef.current?.selectionStart || 0;
       const textBeforeCursor = value.substring(0, cursorPosition);
       const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
       if (lastAtIndex !== -1) {
         const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+
         if (!textAfterAt.includes(' ') && textAfterAt.length > 0) {
           setMentionStart(lastAtIndex);
           setSearchTerm(textAfterAt);
@@ -61,14 +68,17 @@ export default function MentionInput({
         setShowSuggestions(false);
       }
     };
+
     checkForMention();
   }, [value]);
+
   const loadConversationMembers = async () => {
     try {
       const q = query(
         collection(db, 'users'),
         limit(20)
       );
+
       const snapshot = await getDocs(q);
       const users: UserProfile[] = snapshot.docs.map(doc => ({
         uid: doc.id,
@@ -79,16 +89,19 @@ export default function MentionInput({
         role: doc.data().role,
         plan: doc.data().plan,
       }));
+
       setSuggestions(users);
     } catch (error) {
       console.error('Error loading users:', error);
     }
   };
+
   const searchUsers = async (search: string) => {
     if (search.length < 1) {
       setSuggestions([]);
       return;
     }
+
     try {
       const q = query(
         collection(db, 'users'),
@@ -96,6 +109,7 @@ export default function MentionInput({
         where('name', '<=', search + '\uf8ff'),
         limit(10)
       );
+
       const snapshot = await getDocs(q);
       const users: UserProfile[] = snapshot.docs.map(doc => ({
         uid: doc.id,
@@ -106,26 +120,32 @@ export default function MentionInput({
         role: doc.data().role,
         plan: doc.data().plan,
       }));
+
       setSuggestions(users);
     } catch (error) {
       console.error('Error searching users:', error);
     }
   };
+
   const insertMention = (user: UserProfile) => {
     if (mentionStart === -1) return;
+
     const beforeMention = value.substring(0, mentionStart);
     const afterMention = value.substring(inputRef.current?.selectionStart || value.length);
     const newValue = `${beforeMention}@${user.name} ${afterMention}`;
+
     onChange(newValue);
     setShowSuggestions(false);
     setMentionStart(-1);
     setSearchTerm('');
+
     setTimeout(() => {
       inputRef.current?.focus();
       const newPosition = mentionStart + user.name.length + 2;
       inputRef.current?.setSelectionRange(newPosition, newPosition);
     }, 0);
   };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (showSuggestions && suggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -145,19 +165,24 @@ export default function MentionInput({
       onSubmit();
     }
   };
+
   const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
     if (onTyping) onTyping();
   };
+
   const handleMentionClick = async (e: React.MouseEvent, mentionText: string) => {
     e.preventDefault();
+
     const userName = mentionText.substring(1).trim();
+
     try {
       const q = query(
         collection(db, 'users'),
         where('name', '==', userName),
         limit(1)
       );
+
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
         const userData = snapshot.docs[0].data();
@@ -170,6 +195,7 @@ export default function MentionInput({
           role: userData.role,
           plan: userData.plan,
         };
+
         const rect = (e.target as HTMLElement).getBoundingClientRect();
         setCardPosition({ x: rect.left, y: rect.bottom + 5 });
         setShowUserCard(userProfile);
@@ -178,8 +204,10 @@ export default function MentionInput({
       console.error('Error fetching user profile:', error);
     }
   };
+
   const renderMessageWithMentions = (text: string) => {
     const parts = text.split(/(@\w+)/g);
+
     return parts.map((part, index) => {
       if (part.startsWith('@')) {
         return (
@@ -195,6 +223,7 @@ export default function MentionInput({
       return part;
     });
   };
+
   return (
     <div className="relative">
       <textarea
@@ -208,6 +237,7 @@ export default function MentionInput({
         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
         style={{ minHeight: '48px', maxHeight: '120px' }}
       />
+
       <AnimatePresence>
         {showSuggestions && suggestions.length > 0 && (
           <motion.div
@@ -255,6 +285,7 @@ export default function MentionInput({
           </motion.div>
         )}
       </AnimatePresence>
+
       <AnimatePresence>
         {showUserCard && (
           <>

@@ -4,7 +4,9 @@ import { ArrowLeft, CheckCircle, Clock, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import { registerLessonView, getLessonProgress } from '../services/progressService';
-import { supabase } from '../lib/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+
 interface Lesson {
   id: string;
   title: string;
@@ -14,6 +16,7 @@ interface Lesson {
   moduleId: string;
   description?: string;
 }
+
 export default function LessonViewerPage() {
   const { courseId, moduleId, lessonId } = useParams<{
     courseId: string;
@@ -26,22 +29,27 @@ export default function LessonViewerPage() {
   const [loading, setLoading] = useState(true);
   const [isViewed, setIsViewed] = useState(false);
   const [registering, setRegistering] = useState(false);
+
   useEffect(() => {
     if (courseId && moduleId && lessonId) {
       loadLesson();
     }
   }, [courseId, moduleId, lessonId]);
+
   useEffect(() => {
     if (currentUser && courseId && moduleId && lessonId && lesson) {
       checkProgress();
       registerView();
     }
   }, [currentUser, lesson]);
+
   const loadLesson = async () => {
     if (!courseId || !moduleId || !lessonId) return;
+
     try {
       const lessonRef = doc(db, 'courses', courseId, 'modules', moduleId, 'lessons', lessonId);
       const lessonSnap = await getDoc(lessonRef);
+
       if (lessonSnap.exists()) {
         setLesson({
           id: lessonSnap.id,
@@ -56,8 +64,10 @@ export default function LessonViewerPage() {
       setLoading(false);
     }
   };
+
   const checkProgress = async () => {
     if (!currentUser || !moduleId || !lessonId) return;
+
     try {
       const progress = await getLessonProgress(currentUser.uid, moduleId, lessonId);
       setIsViewed(progress.viewed);
@@ -65,8 +75,10 @@ export default function LessonViewerPage() {
       console.error('Error checking progress:', error);
     }
   };
+
   const registerView = async () => {
     if (!currentUser || !courseId || !moduleId || !lessonId || !lesson || registering) return;
+
     try {
       setRegistering(true);
       await registerLessonView(
@@ -83,10 +95,13 @@ export default function LessonViewerPage() {
       setRegistering(false);
     }
   };
+
   const getYouTubeEmbedUrl = (url: string) => {
     if (!url) return '';
+
     try {
       let videoId = '';
+
       if (url.includes('youtube.com/watch')) {
         const urlParams = new URLSearchParams(new URL(url).search);
         videoId = urlParams.get('v') || '';
@@ -97,7 +112,9 @@ export default function LessonViewerPage() {
       } else if (url.includes('youtube.com/shorts/')) {
         videoId = url.split('youtube.com/shorts/')[1]?.split('?')[0]?.split('/')[0] || '';
       }
+
       videoId = videoId.trim();
+
       if (videoId && videoId.length === 11) {
         return `https://www.youtube.com/embed/${videoId}`;
       }
@@ -106,6 +123,7 @@ export default function LessonViewerPage() {
     }
     return url;
   };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -116,6 +134,7 @@ export default function LessonViewerPage() {
       </div>
     );
   }
+
   if (!lesson) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
@@ -131,6 +150,7 @@ export default function LessonViewerPage() {
       </div>
     );
   }
+
   return (
     <div className="min-h-screen">
       <div className="max-w-5xl mx-auto p-4 md:p-6">
@@ -142,6 +162,7 @@ export default function LessonViewerPage() {
             <ArrowLeft className="w-5 h-5" />
             Back to Progress
           </button>
+
           {isViewed && (
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
@@ -153,6 +174,7 @@ export default function LessonViewerPage() {
             </motion.div>
           )}
         </div>
+
         <div className="glass-video overflow-hidden mb-6">
           {lesson.videoUrl ? (
             <div className="aspect-video w-full bg-black">
@@ -170,6 +192,7 @@ export default function LessonViewerPage() {
             </div>
           )}
         </div>
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -189,11 +212,13 @@ export default function LessonViewerPage() {
               </div>
             </div>
           </div>
+
           {lesson.description && (
             <div className="mt-6 prose max-w-none">
               <p className="text-gray-700 leading-relaxed">{lesson.description}</p>
             </div>
           )}
+
           <div className="mt-8 p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200">
             <h3 className="font-bold text-lg text-blue-900 mb-2">Keep Learning!</h3>
             <p className="text-blue-800 mb-4">

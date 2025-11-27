@@ -1,3 +1,5 @@
+import { Timestamp } from 'firebase/firestore';
+
 interface MessageBubbleProps {
   text: string;
   senderName?: string;
@@ -6,6 +8,7 @@ interface MessageBubbleProps {
   isOwn: boolean;
   messageId?: string;
 }
+
 export default function MessageBubble({
   text,
   senderName,
@@ -23,6 +26,7 @@ export default function MessageBubble({
       return '';
     }
   };
+
   const getRoleStyle = () => {
     if (isOwn) {
       switch (senderRole) {
@@ -44,6 +48,7 @@ export default function MessageBubble({
       }
     }
   };
+
   const getRoleBadge = () => {
     switch (senderRole) {
       case 'mentor':
@@ -54,6 +59,7 @@ export default function MessageBubble({
         return '🎓 Student';
     }
   };
+
   return (
     <div id={messageId ? `message-${messageId}` : undefined} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`max-w-[75%] md:max-w-[60%]`}>

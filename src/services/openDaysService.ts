@@ -1,4 +1,6 @@
-import { supabase } from '../lib/auth';
+import { db } from '../lib/firebase';
+import { collection, doc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy, Timestamp } from 'firebase/firestore';
+
 export interface OpenDay {
   id?: string;
   city: string;
@@ -10,11 +12,13 @@ export interface OpenDay {
   created_at?: string;
   last_updated?: string;
 }
+
 export async function getAllOpenDays(): Promise<OpenDay[]> {
   try {
     const openDaysRef = collection(db, 'open_days');
     const q = query(openDaysRef, orderBy('date', 'asc'));
     const querySnapshot = await getDocs(q);
+
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
@@ -24,6 +28,7 @@ export async function getAllOpenDays(): Promise<OpenDay[]> {
     return [];
   }
 }
+
 export async function createOpenDay(openDay: OpenDay, userId: string): Promise<OpenDay | null> {
   try {
     const openDaysRef = collection(db, 'open_days');
@@ -33,6 +38,7 @@ export async function createOpenDay(openDay: OpenDay, userId: string): Promise<O
       created_at: Timestamp.now(),
       last_updated: Timestamp.now()
     });
+
     return {
       id: docRef.id,
       ...openDay,
@@ -43,6 +49,7 @@ export async function createOpenDay(openDay: OpenDay, userId: string): Promise<O
     return null;
   }
 }
+
 export async function updateOpenDay(id: string, updates: Partial<OpenDay>): Promise<boolean> {
   try {
     const openDayRef = doc(db, 'open_days', id);
@@ -56,6 +63,7 @@ export async function updateOpenDay(id: string, updates: Partial<OpenDay>): Prom
     return false;
   }
 }
+
 export async function deleteOpenDay(id: string): Promise<boolean> {
   try {
     const openDayRef = doc(db, 'open_days', id);

@@ -16,8 +16,25 @@
  * Think of it as a "loyalty program" or "verified badge" system that REWARDS
  * good behavior, not a moderation system that RESTRICTS bad behavior.
  */
-import { supabase } from '../lib/auth';
+
+import {
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  Timestamp,
+  increment,
+  writeBatch
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { aiModerationService } from './aiModerationService';
+
 export interface UserReputation {
   userId: string;
   userName: string;
@@ -57,10 +74,12 @@ export interface UserReputation {
     date: Timestamp | null;
   };
 }
+
 export const reputationService = {
   async initializeReputation(userId: string, userName: string): Promise<void> {
     const reputationRef = doc(db, 'user_reputation', userId);
     const existingDoc = await getDoc(reputationRef);
+
     if (!existingDoc.exists()) {
       const initialReputation: UserReputation = {
         userId,
@@ -97,29 +116,36 @@ export const reputationService = {
           date: null
         }
       };
+
       await setDoc(reputationRef, initialReputation);
     }
   },
+
   async getReputation(userId: string): Promise<UserReputation | null> {
     try {
       const reputationRef = doc(db, 'user_reputation', userId);
       const snapshot = await getDoc(reputationRef);
+
       if (snapshot.exists()) {
         return snapshot.data() as UserReputation;
       }
+
       return null;
     } catch (error) {
       console.error('Error getting reputation:', error);
       return null;
     }
   },
+
   async calculateUserScore(userId: string): Promise<number> {
     const userDoc = await getDoc(doc(db, 'users', userId));
     if (!userDoc.exists()) return 50;
+
     const userName = userDoc.data().name || 'Unknown';
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
     const weekAgoTimestamp = Timestamp.fromDate(weekAgo);
+
     const postsQuery = query(
       collection(db, 'community_posts'),
       where('userId', '==', userId),
@@ -127,6 +153,7 @@ export const reputationService = {
     );
     const postsSnapshot = await getDocs(postsQuery);
     const totalPosts = postsSnapshot.size;
+
     let helpfulPosts = 0;
     postsSnapshot.forEach((doc) => {
       const post = doc.data();
@@ -134,14 +161,17 @@ export const reputationService = {
         helpfulPosts++;
       }
     });
+
     const moderationLogsQuery = query(
       collection(db, 'moderation_logs'),
       where('userId', '==', userId),
       where('timestamp', '>=', weekAgoTimestamp)
     );
     const moderationSnapshot = await getDocs(moderationLogsQuery);
+
     let violations = 0;
     let warnings = 0;
+
     moderationSnapshot.forEach((doc) => {
       const log = doc.data();
       if (log.action === 'block' || log.action === 'ban') {
@@ -150,6 +180,7 @@ export const reputationService = {
         warnings++;
       }
     });
+
     const messagesQuery = query(
       collection(db, 'groupChats', 'publicRoom', 'messages'),
       where('senderId', '==', userId),
@@ -157,11 +188,13 @@ export const reputationService = {
     );
     const messagesSnapshot = await getDocs(messagesQuery);
     const messageCount = messagesSnapshot.size;
+
     const marketplaceProductsQuery = query(
       collection(db, 'marketplace_products'),
       where('sellerId', '==', userId)
     );
     const productsSnapshot = await getDocs(marketplaceProductsQuery);
+
     let totalRatings = 0;
     let ratingSum = 0;
     productsSnapshot.forEach((doc) => {
@@ -171,25 +204,34 @@ export const reputationService = {
         totalRatings += product.ratingCount;
       }
     });
+
     const marketplaceRating = totalRatings > 0 ? ratingSum / totalRatings : 0;
+
     const consistency = totalPosts >= 3 ? Math.min(totalPosts / 7 * 10, 15) : 0;
     const engagement = Math.min((messageCount + totalPosts) / 20 * 15, 20);
+
     let score = 50;
+
     score += helpfulPosts * 3;
     score += consistency;
     score += engagement;
     score += marketplaceRating * 5;
     score -= violations * 15;
     score -= warnings * 5;
+
     score = Math.max(0, Math.min(100, score));
+
     const reputationRef = doc(db, 'user_reputation', userId);
     const currentRep = await getDoc(reputationRef);
+
     if (!currentRep.exists()) {
       await this.initializeReputation(userId, userName);
     }
+
     const tier = this.calculateTier(score);
     const perks = this.calculatePerks(score);
     const restrictions = this.calculateRestrictions(score);
+
     await updateDoc(reputationRef, {
       score,
       tier,
@@ -204,8 +246,10 @@ export const reputationService = {
       'metrics.marketplaceRating': marketplaceRating,
       lastCalculated: Timestamp.now()
     });
+
     return score;
   },
+
   calculateTier(score: number): UserReputation['tier'] {
     if (score >= 90) return 'legendary';
     if (score >= 75) return 'elite';
@@ -213,6 +257,7 @@ export const reputationService = {
     if (score >= 40) return 'trusted';
     return 'novice';
   },
+
   calculatePerks(score: number): UserReputation['perks'] {
     return {
       fastPosting: score >= 60,
@@ -221,6 +266,7 @@ export const reputationService = {
       prioritySupport: score >= 90
     };
   },
+
   calculateRestrictions(score: number): UserReputation['restrictions'] {
     // REPUTATION IS A LOYALTY/TRUST BADGE SYSTEM ONLY
     // It does NOT restrict posting or messaging - it only rewards good community members
@@ -231,12 +277,14 @@ export const reputationService = {
       maxPostsPerHour: 999 // Effectively unlimited
     };
   },
+
   async checkPostingAllowed(userId: string): Promise<{ allowed: boolean; reason?: string; waitTime?: number }> {
     // REPUTATION IS A LOYALTY/TRUST BADGE SYSTEM ONLY
     // It does NOT restrict posting or messaging - it only rewards good community members
     // Always allow posting regardless of reputation score
     return { allowed: true };
   },
+
   async manualOverride(
     userId: string,
     newScore: number,
@@ -245,18 +293,22 @@ export const reputationService = {
   ): Promise<void> {
     const reputationRef = doc(db, 'user_reputation', userId);
     const reputation = await getDoc(reputationRef);
+
     if (!reputation.exists()) {
       throw new Error('User reputation not found');
     }
+
     const currentData = reputation.data() as UserReputation;
     const tier = this.calculateTier(newScore);
     const perks = this.calculatePerks(newScore);
     const restrictions = this.calculateRestrictions(newScore);
+
     const historyEntry = {
       date: Timestamp.now(),
       score: newScore,
       reason: `Manual override by admin: ${reason}`
     };
+
     await updateDoc(reputationRef, {
       score: newScore,
       tier,
@@ -269,12 +321,14 @@ export const reputationService = {
       history: [...(currentData.history || []), historyEntry].slice(-10)
     });
   },
+
   async toggleVisibility(userId: string, isPublic: boolean): Promise<void> {
     const reputationRef = doc(db, 'user_reputation', userId);
     await updateDoc(reputationRef, {
       visibilityPublic: isPublic
     });
   },
+
   async getAllReputations(): Promise<UserReputation[]> {
     const reputationsQuery = query(
       collection(db, 'user_reputation'),
@@ -284,9 +338,11 @@ export const reputationService = {
     const snapshot = await getDocs(reputationsQuery);
     return snapshot.docs.map(doc => doc.data() as UserReputation);
   },
+
   async recalculateAllScores(): Promise<void> {
     const usersQuery = query(collection(db, 'users'));
     const usersSnapshot = await getDocs(usersQuery);
+
     for (const userDoc of usersSnapshot.docs) {
       const userId = userDoc.data().uid;
       try {

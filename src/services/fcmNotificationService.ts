@@ -1,5 +1,5 @@
-import { db } from '../lib/auth';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { supabase } from '../lib/auth';
+
 export interface FCMNotification {
   id?: string;
   userId: string;
@@ -11,19 +11,19 @@ export interface FCMNotification {
   actionUrl?: string;
   data?: any;
   imageUrl?: string;
-  createdAt: Timestamp;
-  readAt?: Timestamp;
+  createdAt: string;
+  readAt?: string;
 }
+
 export interface FCMToken {
   userId: string;
   token: string;
   device: string;
   browser: string;
-  createdAt: Timestamp;
-  lastUsed: Timestamp;
+  createdAt: string;
+  lastUsed: string;
 }
-const notificationsCollection = 'fcmNotifications';
-const tokensCollection = 'fcmTokens';
+
 export async function requestNotificationPermission(userId: string): Promise<string | null> {
   try {
     const permission = await Notification.requestPermission();
@@ -31,120 +31,167 @@ export async function requestNotificationPermission(userId: string): Promise<str
       console.log('Notification permission denied');
       return null;
     }
-    const messaging = getMessaging();
-    const token = await getToken(messaging, {
-      vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-    });
-    if (token) {
-      await saveFCMToken(userId, token);
-      return token;
-    }
+
+    console.log('FCM has been removed - using Supabase notifications instead');
     return null;
   } catch (error) {
-    console.error('Error getting FCM token:', error);
+    console.error('Error requesting notification permission:', error);
     return null;
   }
 }
+
 export async function saveFCMToken(userId: string, token: string) {
   const deviceInfo = {
     device: getDeviceType(),
     browser: getBrowserInfo(),
   };
-  const existingTokenQuery = query(
-    collection(db, tokensCollection),
-    where('userId', '==', userId),
-    where('token', '==', token)
-  );
-  const snapshot = await getDocs(existingTokenQuery);
-  if (snapshot.empty) {
-    await addDoc(collection(db, tokensCollection), {
-      userId,
-      token,
-      ...deviceInfo,
-      createdAt: Timestamp.now(),
-      lastUsed: Timestamp.now(),
-    });
+
+  const { data: existingToken, error: queryError } = await supabase
+    .from('fcm_tokens')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('token', token)
+    .maybeSingle();
+
+  if (queryError) throw queryError;
+
+  if (!existingToken) {
+    const { error } = await supabase
+      .from('fcm_tokens')
+      .insert({
+        user_id: userId,
+        token,
+        ...deviceInfo,
+        created_at: new Date().toISOString(),
+        last_used: new Date().toISOString(),
+      });
+
+    if (error) throw error;
   } else {
-    const docRef = doc(db, tokensCollection, snapshot.docs[0].id);
-    await updateDoc(docRef, {
-      lastUsed: Timestamp.now(),
-    });
+    const { error } = await supabase
+      .from('fcm_tokens')
+      .update({
+        last_used: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('token', token);
+
+    if (error) throw error;
   }
 }
+
 export function listenToForegroundMessages(callback: (payload: any) => void) {
-  try {
-    const messaging = getMessaging();
-    return onMessage(messaging, callback);
-  } catch (error) {
-    console.error('Error setting up foreground message listener:', error);
-    return () => {};
-  }
+  console.log('FCM foreground messages disabled - using Supabase real-time instead');
+  return () => {};
 }
+
 export async function createNotification(notification: Omit<FCMNotification, 'id' | 'createdAt' | 'read'>) {
-  const docRef = await addDoc(collection(db, notificationsCollection), {
-    ...notification,
-    read: false,
-    createdAt: Timestamp.now(),
-  });
-  return docRef.id;
+  const { data, error } = await supabase
+    .from('fcm_notifications')
+    .insert({
+      ...notification,
+      user_id: notification.userId,
+      read: false,
+      created_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data.id;
 }
+
 export function subscribeToUserNotifications(
   userId: string,
   callback: (notifications: FCMNotification[]) => void
 ) {
-  const q = query(
-    collection(db, notificationsCollection),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc'),
-    limit(50)
-  );
-  return onSnapshot(q, (snapshot) => {
-    const notifications = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as FCMNotification[];
-    callback(notifications);
-  });
-}
-export async function markNotificationAsRead(notificationId: string) {
-  const docRef = doc(db, notificationsCollection, notificationId);
-  await updateDoc(docRef, {
-    read: true,
-    readAt: Timestamp.now(),
-  });
-}
-export async function markAllNotificationsAsRead(userId: string) {
-  const q = query(
-    collection(db, notificationsCollection),
-    where('userId', '==', userId),
-    where('read', '==', false)
-  );
-  const snapshot = await getDocs(q);
-  const batch = writeBatch(db);
-  snapshot.docs.forEach((document) => {
-    batch.update(document.ref, {
-      read: true,
-      readAt: Timestamp.now(),
+  const channel = supabase
+    .channel(`user-notifications-${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'fcm_notifications',
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        supabase
+          .from('fcm_notifications')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(50)
+          .then(({ data }) => {
+            if (data) callback(data as FCMNotification[]);
+          });
+      }
+    )
+    .subscribe();
+
+  supabase
+    .from('fcm_notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+    .then(({ data }) => {
+      if (data) callback(data as FCMNotification[]);
     });
-  });
-  await batch.commit();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
+
+export async function markNotificationAsRead(notificationId: string) {
+  const { error } = await supabase
+    .from('fcm_notifications')
+    .update({
+      read: true,
+      read_at: new Date().toISOString(),
+    })
+    .eq('id', notificationId);
+
+  if (error) throw error;
+}
+
+export async function markAllNotificationsAsRead(userId: string) {
+  const { error } = await supabase
+    .from('fcm_notifications')
+    .update({
+      read: true,
+      read_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('read', false);
+
+  if (error) throw error;
+}
+
 export async function deleteNotification(notificationId: string) {
-  const docRef = doc(db, notificationsCollection, notificationId);
-  await updateDoc(docRef, {
-    deleted: true,
-    deletedAt: Timestamp.now(),
-  });
+  const { error } = await supabase
+    .from('fcm_notifications')
+    .update({
+      deleted: true,
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('id', notificationId);
+
+  if (error) throw error;
 }
+
 export async function getUnreadCount(userId: string): Promise<number> {
-  const q = query(
-    collection(db, notificationsCollection),
-    where('userId', '==', userId),
-    where('read', '==', false)
-  );
-  const snapshot = await getDocs(q);
-  return snapshot.size;
+  const { count, error } = await supabase
+    .from('fcm_notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('read', false);
+
+  if (error) throw error;
+  return count || 0;
 }
+
 function getDeviceType(): string {
   const ua = navigator.userAgent;
   if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
@@ -155,6 +202,7 @@ function getDeviceType(): string {
   }
   return 'desktop';
 }
+
 function getBrowserInfo(): string {
   const ua = navigator.userAgent;
   if (ua.includes('Firefox')) return 'Firefox';

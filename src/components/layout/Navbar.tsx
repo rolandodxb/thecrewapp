@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '../../lib/auth';
+import { supabase } from '../../lib/auth';
 import SystemAnnouncementBanner from '../SystemAnnouncementBanner';
 export default function Navbar() {
   const { currentUser, logout } = useApp();
@@ -19,15 +19,42 @@ export default function Navbar() {
   const isCommunityPage = location.pathname === '/chat';
   useEffect(() => {
     if (!currentUser) return;
-    const q = query(
-      collection(db, 'notifications'),
-      where('userId', '==', currentUser.uid),
-      where('read', '==', false)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUnreadCount(snapshot.size);
-    });
-    return unsubscribe;
+
+    const channel = supabase
+      .channel('navbar-notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${currentUser.uid}`,
+        },
+        () => {
+          supabase
+            .from('notifications')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', currentUser.uid)
+            .eq('read', false)
+            .then(({ count }) => {
+              setUnreadCount(count || 0);
+            });
+        }
+      )
+      .subscribe();
+
+    supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', currentUser.uid)
+      .eq('read', false)
+      .then(({ count }) => {
+        setUnreadCount(count || 0);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [currentUser]);
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

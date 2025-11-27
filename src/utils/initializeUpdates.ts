@@ -1,80 +1,93 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
+
 export async function initializeUpdates() {
   try {
-    const updatesSnapshot = await getDocs(collection(db, 'updates'));
-    if (updatesSnapshot.empty) {
+    const { data: existingUpdates, error } = await supabase
+      .from('updates')
+      .select('id')
+      .limit(1);
+
+    if (error) throw error;
+
+    if (!existingUpdates || existingUpdates.length === 0) {
       console.log('Initializing updates collection with recent changes...');
+
       const updates = [
         {
           type: 'feature',
           title: 'What\'s New Section',
           description: 'Added comprehensive updates tracking system showing all recent changes, fixes, and announcements in the Notifications page.',
           version: '2.0.0',
-          createdBy: 'system',
-          createdAt: Timestamp.now(),
-          notifyUsers: false
+          created_by: 'system',
+          created_at: new Date().toISOString(),
+          notify_users: false
         },
         {
           type: 'feature',
           title: 'Interactive Leaderboard',
           description: 'Leaderboard cards now expand inline to show detailed user statistics including points, rank, streak, achievements, and bio.',
-          createdBy: 'system',
-          createdAt: Timestamp.now(),
-          notifyUsers: false
+          created_by: 'system',
+          created_at: new Date().toISOString(),
+          notify_users: false
         },
         {
           type: 'fix',
           title: 'Login Activity Cards - Mobile Responsive',
           description: 'Fixed text overflow issues on mobile devices. All text now properly wraps within cards with no overflow.',
-          createdBy: 'system',
-          createdAt: Timestamp.now(),
-          notifyUsers: false
+          created_by: 'system',
+          created_at: new Date().toISOString(),
+          notify_users: false
         },
         {
           type: 'improvement',
           title: 'Inline Forms for Recruiters & Open Days',
           description: 'Replaced floating modals with smooth inline dropdown forms for better user experience when adding recruiters and open days.',
-          createdBy: 'system',
-          createdAt: Timestamp.now(),
-          notifyUsers: false
+          created_by: 'system',
+          created_at: new Date().toISOString(),
+          notify_users: false
         },
         {
           type: 'feature',
           title: 'Unified Notification System',
           description: 'Integrated all notification types including community posts, chat messages, bug reports, system announcements, and learning updates into one comprehensive system.',
           version: '2.0.0',
-          createdBy: 'system',
-          createdAt: Timestamp.now(),
-          notifyUsers: false
+          created_by: 'system',
+          created_at: new Date().toISOString(),
+          notify_users: false
         },
         {
           type: 'feature',
-          title: 'Supabase Notifications Integration',
-          description: 'Migrated notifications to Supabase for better performance, real-time updates, and improved scalability.',
+          title: 'Supabase Migration Complete',
+          description: 'Successfully migrated entire application from Firebase to Supabase for better performance, real-time updates, and improved scalability.',
           version: '2.0.0',
-          createdBy: 'system',
-          createdAt: Timestamp.now(),
-          notifyUsers: false
+          created_by: 'system',
+          created_at: new Date().toISOString(),
+          notify_users: false
         },
         {
           type: 'improvement',
           title: 'Enhanced Chat System',
-          description: 'Improved community chat with better message handling, emoji support, and real-time presence indicators.',
-          createdBy: 'system',
-          createdAt: Timestamp.now(),
-          notifyUsers: false
+          description: 'Improved community chat with better message handling, emoji support, and real-time presence indicators using Supabase.',
+          created_by: 'system',
+          created_at: new Date().toISOString(),
+          notify_users: false
         },
         {
           type: 'fix',
           title: 'Notification Bell Updates',
           description: 'Fixed notification bell to properly show unread counts and sync with Supabase notifications.',
-          createdBy: 'system',
-          createdAt: Timestamp.now(),
-          notifyUsers: false
+          created_by: 'system',
+          created_at: new Date().toISOString(),
+          notify_users: false
         }
       ];
-      const promises = updates.map(update => addDoc(collection(db, 'updates'), update));
-      await Promise.all(promises);
+
+      const { error: insertError } = await supabase
+        .from('updates')
+        .insert(updates);
+
+      if (insertError) throw insertError;
+
       console.log(`Successfully initialized ${updates.length} updates`);
       return true;
     } else {

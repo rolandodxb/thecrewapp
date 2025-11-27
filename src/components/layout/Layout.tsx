@@ -64,7 +64,8 @@ export default function Layout({ children }: LayoutProps) {
           <motion.div
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="hidden lg:block fixed top-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-2xl px-4"
+            className="hidden lg:block fixed top-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-xl px-4"
+            style={{ marginRight: '300px' }}
           >
             <GlobalSearchBar />
           </motion.div>
@@ -199,11 +200,6 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </div>
 
-        {/* Page Indicator Dots */}
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2">
-          <div className="w-2 h-2 bg-gray-900 rounded-full"></div>
-          <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-        </div>
       </div>
     </div>
   );

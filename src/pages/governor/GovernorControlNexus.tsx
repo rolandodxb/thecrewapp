@@ -22,22 +22,6 @@ export default function GovernorControlNexus() {
       title: 'Governor Control Nexus',
       content: (
         <div className="space-y-6 p-4">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass-light border-2 border-transparent hover:border-[#D71920] rounded-2xl p-6 shadow-lg transition"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-gradient-to-br from-[#D71920] to-[#B91518] rounded-xl flex items-center justify-center shadow-md">
-                <Shield className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Governor Control Nexus</h1>
-                <p className="text-gray-600 text-sm mt-1">Central command system for platform management</p>
-              </div>
-            </div>
-          </motion.div>
-
           <MetricsCards />
         </div>
       ),

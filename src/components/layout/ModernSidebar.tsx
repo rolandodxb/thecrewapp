@@ -90,7 +90,7 @@ export default function ModernSidebar() {
             { path: '/community-feed', icon: Rss, label: 'Community Feed' },
             { path: '/community', icon: MessageCircle, label: 'Community Chat', badge: 'NEW' },
             { path: '/chat', icon: MessageCircle, label: 'Private Chat', locked: !chatAccess.allowed, feature: 'chat' as Feature },
-            { path: '/conference', icon: Video, label: 'Conference Room', badge: 'NEW' },
+            { path: '/conferences', icon: Video, label: 'Conference Room', badge: 'NEW' },
             { path: '/invite-friends', icon: UserPlus, label: 'Invite Friends' },
             { path: '/leaderboard', icon: Trophy, label: 'Leaderboard' }
           ]
@@ -159,7 +159,7 @@ export default function ModernSidebar() {
           label: 'Communication',
           items: [
             { path: '/chat', icon: MessageCircle, label: 'Chat' },
-            { path: '/conference', icon: Video, label: 'Conference Room', badge: 'NEW' },
+            { path: '/conferences', icon: Video, label: 'Conference Room', badge: 'NEW' },
             { path: '/community-feed', icon: Rss, label: 'Community' }
           ]
         },
@@ -232,7 +232,7 @@ export default function ModernSidebar() {
           label: 'Communication',
           items: [
             { path: '/chat', icon: MessageCircle, label: 'Chat' },
-            { path: '/conference', icon: Video, label: 'Conference Room', badge: 'NEW' },
+            { path: '/conferences', icon: Video, label: 'Conference Room', badge: 'NEW' },
             { path: '/support-chat-manager', icon: MessageCircle, label: 'Support Manager' }
           ]
         },

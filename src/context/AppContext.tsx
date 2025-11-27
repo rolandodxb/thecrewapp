@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useRef } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { auth } from '../lib/auth';
+import { supabase } from '../lib/supabase';
 import {
   getSystemControl,
   subscribeToSystemControl,
@@ -66,7 +65,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const firestoreUnsubscribeRef = useRef<(() => void) | null>(null);
+  const supabaseUnsubscribeRef = useRef<(() => void) | null>(null);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState('System under maintenance. Please check back soon.');
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -128,105 +127,154 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Auth listener setup
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      // Clean up any existing Firestore listener
-      if (firestoreUnsubscribeRef.current) {
-        firestoreUnsubscribeRef.current();
-        firestoreUnsubscribeRef.current = null;
+    const unsubscribeAuth = auth.onAuthStateChanged(async (authUser) => {
+      if (supabaseUnsubscribeRef.current) {
+        supabaseUnsubscribeRef.current();
+        supabaseUnsubscribeRef.current = null;
       }
 
-      if (firebaseUser) {
-        // User authenticated
-
+      if (authUser) {
         if (sessionStorage.getItem('pending2FA') === 'true') {
-          // 2FA verification required
           setLoading(false);
           return;
         }
 
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const unsubscribeFirestore = onSnapshot(
-          userDocRef,
-          (docSnap) => {
-            if (docSnap.exists()) {
-              const userData = docSnap.data();
-              // User data loaded
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authUser.uid)
+          .maybeSingle();
 
-              const updatedUser: User = {
-                uid: firebaseUser.uid,
-                email: userData.email || firebaseUser.email || '',
-                name: userData.name || 'User',
-                role: (userData.role || 'student') as Role,
-                plan: (userData.plan || 'free') as Plan,
-                country: userData.country || '',
-                bio: userData.bio || '',
-                expectations: userData.expectations || '',
-                photoURL: userData.photo_base64 || '',
-                hasCompletedOnboarding: userData.hasCompletedOnboarding || false,
-                hasSeenWelcomeBanner: userData.hasSeenWelcomeBanner || false,
-                onboardingCompletedAt: userData.onboardingCompletedAt,
-                welcomeBannerSeenAt: userData.welcomeBannerSeenAt,
-                createdAt: userData.createdAt || new Date().toISOString(),
-                updatedAt: userData.updatedAt || new Date().toISOString(),
-                banned: userData.banned,
-                muted: userData.muted,
-                cvUrl: userData.cvUrl,
-              };
+        if (error) {
+          console.error('Error fetching user data:', error);
+          if (error.code === 'PGRST116') {
+            const defaultUserData = {
+              id: authUser.uid,
+              email: authUser.email || '',
+              name: authUser.displayName || 'User',
+              role: 'student',
+              plan: 'free',
+              country: '',
+              bio: '',
+              photo_url: '',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
 
-              setCurrentUser(updatedUser);
-              setLoading(false);
+            const { error: insertError } = await supabase
+              .from('users')
+              .insert(defaultUserData);
 
-              initializeUserPoints(firebaseUser.uid).catch(console.error);
-              handleDailyLogin(firebaseUser.uid).catch(console.error);
-            } else {
-              console.log('User document does not exist, creating default document...');
-              const defaultUserData = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email || '',
-                name: firebaseUser.displayName || 'User',
-                role: 'student',
-                plan: 'free',
-                country: '',
-                bio: '',
-                expectations: '',
-                photo_base64: '',
-                points: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                hasCompletedOnboarding: false,
-                hasSeenWelcomeBanner: false,
-              };
-
-              setDoc(userDocRef, defaultUserData).catch((err) => {
-                console.error('Error creating user document:', err);
-                auth.signOut();
-                setCurrentUser(null);
-                sessionStorage.clear();
-              });
-            }
-          },
-          (error) => {
-            console.error('Error listening to user document:', error);
-
-            if (error.code === 'permission-denied') {
-              setTimeout(() => {
-                firebaseUser.getIdToken(true).catch(() => {
-                  auth.signOut();
-                  setCurrentUser(null);
-                  sessionStorage.clear();
-                });
-              }, 2000);
-            } else {
-              auth.signOut();
+            if (insertError) {
+              console.error('Error creating user:', insertError);
+              await auth.signOut();
               setCurrentUser(null);
               sessionStorage.clear();
+              setLoading(false);
+              return;
             }
-          }
-        );
 
-        firestoreUnsubscribeRef.current = unsubscribeFirestore;
+            const appUser: User = {
+              uid: authUser.uid,
+              email: authUser.email || '',
+              name: authUser.displayName || 'User',
+              role: 'student' as Role,
+              plan: 'free' as Plan,
+              country: '',
+              bio: '',
+              photoURL: '',
+              expectations: '',
+              hasCompletedOnboarding: false,
+              hasSeenWelcomeBanner: false,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+
+            setCurrentUser(appUser);
+            setLoading(false);
+
+            initializeUserPoints(authUser.uid).catch(console.error);
+            handleDailyLogin(authUser.uid).catch(console.error);
+          } else {
+            await auth.signOut();
+            setCurrentUser(null);
+            sessionStorage.clear();
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (userData) {
+          const appUser: User = {
+            uid: userData.id,
+            email: userData.email || '',
+            name: userData.name || 'User',
+            role: (userData.role || 'student') as Role,
+            plan: (userData.plan || 'free') as Plan,
+            country: userData.country || '',
+            bio: userData.bio || '',
+            photoURL: userData.photo_url || '',
+            expectations: userData.metadata?.expectations || '',
+            hasCompletedOnboarding: userData.metadata?.hasCompletedOnboarding || false,
+            hasSeenWelcomeBanner: userData.metadata?.hasSeenWelcomeBanner || false,
+            onboardingCompletedAt: userData.metadata?.onboardingCompletedAt,
+            welcomeBannerSeenAt: userData.metadata?.welcomeBannerSeenAt,
+            createdAt: userData.created_at || new Date().toISOString(),
+            updatedAt: userData.updated_at || new Date().toISOString(),
+            banned: userData.metadata?.banned,
+            muted: userData.metadata?.muted,
+            cvUrl: userData.metadata?.cvUrl,
+          };
+
+          setCurrentUser(appUser);
+          setLoading(false);
+
+          initializeUserPoints(authUser.uid).catch(console.error);
+          handleDailyLogin(authUser.uid).catch(console.error);
+        }
+
+        const subscription = supabase
+          .channel(`user:${authUser.uid}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'users',
+              filter: `id=eq.${authUser.uid}`,
+            },
+            async (payload) => {
+              if (payload.eventType === 'UPDATE' && payload.new) {
+                const userData = payload.new;
+                const appUser: User = {
+                  uid: userData.id,
+                  email: userData.email || '',
+                  name: userData.name || 'User',
+                  role: (userData.role || 'student') as Role,
+                  plan: (userData.plan || 'free') as Plan,
+                  country: userData.country || '',
+                  bio: userData.bio || '',
+                  photoURL: userData.photo_url || '',
+                  expectations: userData.metadata?.expectations || '',
+                  hasCompletedOnboarding: userData.metadata?.hasCompletedOnboarding || false,
+                  hasSeenWelcomeBanner: userData.metadata?.hasSeenWelcomeBanner || false,
+                  onboardingCompletedAt: userData.metadata?.onboardingCompletedAt,
+                  welcomeBannerSeenAt: userData.metadata?.welcomeBannerSeenAt,
+                  createdAt: userData.created_at || new Date().toISOString(),
+                  updatedAt: userData.updated_at || new Date().toISOString(),
+                  banned: userData.metadata?.banned,
+                  muted: userData.metadata?.muted,
+                  cvUrl: userData.metadata?.cvUrl,
+                };
+                setCurrentUser(appUser);
+              }
+            }
+          )
+          .subscribe();
+
+        supabaseUnsubscribeRef.current = () => {
+          supabase.removeChannel(subscription);
+        };
       } else {
         setCurrentUser(null);
         setLoading(false);
@@ -234,11 +282,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
-      // Cleanup auth listener
-      // Clean up Firestore listener if it exists
-      if (firestoreUnsubscribeRef.current) {
-        firestoreUnsubscribeRef.current();
-        firestoreUnsubscribeRef.current = null;
+      if (supabaseUnsubscribeRef.current) {
+        supabaseUnsubscribeRef.current();
+        supabaseUnsubscribeRef.current = null;
       }
       unsubscribeAuth();
     };

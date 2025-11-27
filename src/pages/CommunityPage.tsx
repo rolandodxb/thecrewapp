@@ -17,6 +17,7 @@ export default function CommunityPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
+  const [showMobileMessages, setShowMobileMessages] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { messages, loading } = useChatMessages(selectedConversation?.id || null);
@@ -92,12 +93,12 @@ export default function CommunityPage() {
 
   return (
     <div className="h-screen flex bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200 p-4 gap-4 overflow-hidden">
-      {/* Left Sidebar */}
+      {/* Left Sidebar - Full screen on mobile when no conversation selected */}
       <motion.div
         initial={{ x: -50, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-        className="w-80 flex flex-col gap-3"
+        className={`${showMobileMessages ? 'hidden md:flex' : 'flex'} w-full md:w-80 flex-col gap-3`}
       >
         {/* Top Buttons */}
         <div className="flex items-center gap-2">
@@ -148,7 +149,10 @@ export default function CommunityPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ delay: index * 0.05 }}
-                  onClick={() => setSelectedConversation(conv)}
+                  onClick={() => {
+                    setSelectedConversation(conv);
+                    setShowMobileMessages(true);
+                  }}
                   className={`w-full px-3 py-3 text-left rounded-2xl hover:bg-gray-50 transition mb-2 ${
                     selectedConversation?.id === conv.id ? 'bg-blue-50' : ''
                   }`}
@@ -176,13 +180,21 @@ export default function CommunityPage() {
         initial={{ x: 50, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
-        className="flex-1 bg-white rounded-3xl shadow-lg overflow-hidden flex flex-col"
+        className={`${!showMobileMessages ? 'hidden md:flex' : 'flex'} flex-1 bg-white rounded-3xl shadow-lg overflow-hidden flex-col w-full`}
       >
         {selectedConversation ? (
           <>
-            {/* Top Search Bar */}
-            <div className="p-4 border-b border-gray-100">
-              <div className="relative max-w-md">
+            {/* Top Bar with Back Button */}
+            <div className="p-4 border-b border-gray-100 flex items-center gap-3">
+              <button
+                onClick={() => setShowMobileMessages(false)}
+                className="md:hidden p-2 hover:bg-gray-100 rounded-full transition"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"

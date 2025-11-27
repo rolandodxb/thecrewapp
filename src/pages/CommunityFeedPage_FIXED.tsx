@@ -118,110 +118,110 @@ export default function CommunityFeedPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Community Feed</h1>
-            <p className="text-sm text-gray-600 mt-1">Connect and share with the community</p>
-          </div>
-
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-[#D71920] to-pink-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all"
-          >
-            <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="text-sm sm:text-base">Create Post</span>
-          </motion.button>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Community Feed</h1>
+          <p className="text-sm text-gray-600 mt-1">Connect and share with the community</p>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          {/* Channel Filter */}
-          <div className="flex-1">
-            <div className="flex flex-wrap gap-2">
-              {CHANNELS.map(channel => (
-                <motion.button
-                  key={channel.value}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setSelectedChannel(channel.value)}
-                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
-                    selectedChannel === channel.value
-                      ? `bg-gradient-to-r ${channel.color} text-white shadow-md`
-                      : 'bg-white/80 text-gray-700 hover:bg-white'
-                  }`}
-                >
-                  {channel.label}
-                </motion.button>
-              ))}
-            </div>
-          </div>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-[#D71920] to-pink-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all"
+        >
+          <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-sm sm:text-base">Create Post</span>
+        </motion.button>
+      </div>
 
-          {/* Type Filter */}
-          <div className="flex gap-2">
-            {FILTERS.map(filter => (
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        {/* Channel Filter */}
+        <div className="flex-1">
+          <div className="flex flex-wrap gap-2">
+            {CHANNELS.map(channel => (
               <motion.button
-                key={filter.value}
+                key={channel.value}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => setSelectedFilter(filter.value)}
+                onClick={() => setSelectedChannel(channel.value)}
                 className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
-                  selectedFilter === filter.value
-                    ? 'bg-gray-900 text-white shadow-md'
+                  selectedChannel === channel.value
+                    ? `bg-gradient-to-r ${channel.color} text-white shadow-md`
                     : 'bg-white/80 text-gray-700 hover:bg-white'
                 }`}
               >
-                {filter.label}
+                {channel.label}
               </motion.button>
             ))}
           </div>
         </div>
 
-        {/* Posts Grid */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="glass-card rounded-2xl p-6 animate-pulse">
-                <div className="h-48 bg-gray-200 rounded-xl mb-4"></div>
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-              </div>
-            ))}
-          </div>
-        ) : posts.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass-card rounded-2xl p-12 text-center"
-          >
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Grid className="w-8 h-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No posts yet</h3>
-            <p className="text-gray-600 mb-6">Be the first to share something with the community</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-6 py-2.5 bg-gradient-to-r from-[#D71920] to-pink-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
+        {/* Type Filter */}
+        <div className="flex gap-2">
+          {FILTERS.map(filter => (
+            <motion.button
+              key={filter.value}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setSelectedFilter(filter.value)}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                selectedFilter === filter.value
+                  ? 'bg-gray-900 text-white shadow-md'
+                  : 'bg-white/80 text-gray-700 hover:bg-white'
+              }`}
             >
-              Create First Post
-            </button>
-          </motion.div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {posts.map((post, index) => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <PostCard post={post} currentUser={currentUser!} onDeleted={() => loadPosts(true)} />
-              </motion.div>
-            ))}
+              {filter.label}
+            </motion.button>
+          ))}
+        </div>
+      </div>
+
+      {/* Posts Grid */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="glass-card rounded-2xl p-6 animate-pulse">
+              <div className="h-48 bg-gray-200 rounded-xl mb-4"></div>
+              <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            </div>
+          ))}
+        </div>
+      ) : posts.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card rounded-2xl p-12 text-center"
+        >
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Grid className="w-8 h-8 text-gray-400" />
           </div>
-        )}
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No posts yet</h3>
+          <p className="text-gray-600 mb-6">Be the first to share something with the community</p>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-6 py-2.5 bg-gradient-to-r from-[#D71920] to-pink-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
+          >
+            Create First Post
+          </button>
+        </motion.div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          {posts.map((post, index) => (
+            <motion.div
+              key={post.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <PostCard post={post} currentUser={currentUser!} onDeleted={() => loadPosts(true)} />
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       {/* Load More Trigger */}
       <div ref={observerTarget} className="h-10 flex items-center justify-center">

@@ -7,9 +7,7 @@ import { motion } from 'framer-motion';
 import NewCourseForm from '../components/NewCourseForm';
 import { useApp } from '../context/AppContext';
 import { updateLastAccessed, isEnrolledInModule } from '../services/enrollmentService';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-
+import { db } from '../lib/auth';
 export default function SubmoduleViewerPage() {
   const { submoduleId } = useParams<{ submoduleId: string }>();
   const navigate = useNavigate();
@@ -18,37 +16,28 @@ export default function SubmoduleViewerPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCourseForm, setShowCourseForm] = useState(false);
-
   const isAdmin = currentUser?.role === 'mentor' || currentUser?.role === 'governor';
-
   useEffect(() => {
     if (submoduleId) {
       loadSubmoduleData();
     }
   }, [submoduleId]);
-
   const loadSubmoduleData = async () => {
     if (!submoduleId) return;
-
     try {
       const sub = await getSubmodule(submoduleId);
       setSubmodule(sub);
-
       if (sub) {
         console.log('SubmoduleViewer: Skipping enrollment check - allowing all users to view submodules');
-
         if (currentUser && submoduleId) {
           await updateLastAccessed(currentUser.uid, submoduleId);
         }
-
         const courseIds: string[] = [];
         if (sub.course_id) courseIds.push(sub.course_id);
         if (sub.course1_id) courseIds.push(sub.course1_id);
         if (sub.course2_id) courseIds.push(sub.course2_id);
-
         console.log('SubmoduleViewer: Submodule data:', sub);
         console.log('SubmoduleViewer: Course IDs found:', courseIds);
-
         if (courseIds.length > 0) {
           const coursesData = await Promise.all(
             courseIds.map(async (courseId) => {
@@ -63,7 +52,6 @@ export default function SubmoduleViewerPage() {
               return null;
             })
           );
-
           const validCourses = coursesData.filter(c => c !== null) as Course[];
           console.log('SubmoduleViewer: Valid courses:', validCourses);
           setCourses(validCourses);
@@ -78,7 +66,6 @@ export default function SubmoduleViewerPage() {
       setLoading(false);
     }
   };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -86,7 +73,6 @@ export default function SubmoduleViewerPage() {
       </div>
     );
   }
-
   if (!submodule) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
@@ -101,7 +87,6 @@ export default function SubmoduleViewerPage() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen pb-8">
       <div className="max-w-6xl mx-auto">
@@ -112,7 +97,6 @@ export default function SubmoduleViewerPage() {
           <ArrowLeft className="w-5 h-5" />
           Back to Main Module
         </button>
-
         <div className="glass-card overflow-hidden mb-8">
           {submodule.coverImage && (
             <img
@@ -129,7 +113,6 @@ export default function SubmoduleViewerPage() {
               <h1 className="text-4xl font-bold text-gray-900 mb-4">{submodule.title}</h1>
               <p className="text-lg text-gray-600 leading-relaxed">{submodule.description}</p>
             </div>
-
             {isAdmin && (
               <div className="flex gap-3 mt-6">
                 <button
@@ -143,7 +126,6 @@ export default function SubmoduleViewerPage() {
             )}
           </div>
         </div>
-
         {courses.length > 0 ? (
           <div className="mb-8">
             <div className="mb-6">
@@ -219,7 +201,6 @@ export default function SubmoduleViewerPage() {
             )}
           </div>
         )}
-
         {isAdmin && (
           <NewCourseForm
             isOpen={showCourseForm}

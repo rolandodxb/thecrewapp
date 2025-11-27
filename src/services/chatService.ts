@@ -1,20 +1,5 @@
-import {
-  collection,
-  addDoc,
-  query,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-  getDocs,
-  where,
-  doc,
-  setDoc,
-  updateDoc,
-  Timestamp,
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db } from '../lib/auth';
 import { aiModerationService } from './aiModerationService';
-
 export interface GroupMessage {
   id: string;
   senderId: string;
@@ -23,7 +8,6 @@ export interface GroupMessage {
   text: string;
   createdAt: Timestamp;
 }
-
 export interface PrivateMessage {
   id: string;
   senderId: string;
@@ -31,7 +15,6 @@ export interface PrivateMessage {
   text: string;
   createdAt: Timestamp;
 }
-
 export interface Conversation {
   id: string;
   participants: string[];
@@ -41,7 +24,6 @@ export interface Conversation {
   lastUpdated: Timestamp;
   lastMessage?: string;
 }
-
 export interface User {
   uid: string;
   name: string;
@@ -53,7 +35,6 @@ export interface User {
   profilePicture?: string;
   photo_base64?: string;
 }
-
 export const sendGroupMessage = async (
   senderId: string,
   senderName: string,
@@ -66,11 +47,9 @@ export const sendGroupMessage = async (
     text,
     'chat'
   );
-
   if (!moderationResult.allowed) {
     throw new Error(moderationResult.reason);
   }
-
   const messagesRef = collection(db, 'groupChats', 'publicRoom', 'messages');
   await addDoc(messagesRef, {
     senderId,
@@ -80,13 +59,11 @@ export const sendGroupMessage = async (
     createdAt: serverTimestamp(),
   });
 };
-
 export const subscribeToGroupMessages = (
   callback: (messages: GroupMessage[]) => void
 ): (() => void) => {
   const messagesRef = collection(db, 'groupChats', 'publicRoom', 'messages');
   const q = query(messagesRef, orderBy('createdAt', 'asc'));
-
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const messages: GroupMessage[] = [];
     snapshot.forEach((doc) => {
@@ -94,10 +71,8 @@ export const subscribeToGroupMessages = (
     });
     callback(messages);
   });
-
   return unsubscribe;
 };
-
 export const getOrCreateConversation = async (
   currentUserId: string,
   currentUserName: string,
@@ -107,29 +82,23 @@ export const getOrCreateConversation = async (
   targetUserRole: string
 ): Promise<string> => {
   const conversationsRef = collection(db, 'conversations');
-
   const q1 = query(
     conversationsRef,
     where('participants', 'array-contains', currentUserId)
   );
-
   const snapshot = await getDocs(q1);
   let existingConversation: string | null = null;
-
   snapshot.forEach((doc) => {
     const data = doc.data();
     if (data.participants.includes(targetUserId)) {
       existingConversation = doc.id;
     }
   });
-
   if (existingConversation) {
     return existingConversation;
   }
-
   const conversationId = [currentUserId, targetUserId].sort().join('_');
   const conversationRef = doc(db, 'conversations', conversationId);
-
   await setDoc(conversationRef, {
     participants: [currentUserId, targetUserId],
     participantNames: {
@@ -144,10 +113,8 @@ export const getOrCreateConversation = async (
     lastUpdated: serverTimestamp(),
     lastMessage: '',
   });
-
   return conversationId;
 };
-
 export const sendPrivateMessage = async (
   conversationId: string,
   senderId: string,
@@ -162,33 +129,28 @@ export const sendPrivateMessage = async (
       text,
       'chat'
     );
-
     if (!moderationResult.allowed) {
       throw new Error(moderationResult.reason);
     }
   }
-
   const messagesRef = collection(
     db,
     'conversations',
     conversationId,
     'messages'
   );
-
   await addDoc(messagesRef, {
     senderId,
     senderRole,
     text: text.trim(),
     createdAt: serverTimestamp(),
   });
-
   const conversationRef = doc(db, 'conversations', conversationId);
   await updateDoc(conversationRef, {
     lastUpdated: serverTimestamp(),
     lastMessage: text.trim().substring(0, 50),
   });
 };
-
 export const subscribeToPrivateMessages = (
   conversationId: string,
   callback: (messages: PrivateMessage[]) => void
@@ -200,7 +162,6 @@ export const subscribeToPrivateMessages = (
     'messages'
   );
   const q = query(messagesRef, orderBy('createdAt', 'asc'));
-
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const messages: PrivateMessage[] = [];
     snapshot.forEach((doc) => {
@@ -208,10 +169,8 @@ export const subscribeToPrivateMessages = (
     });
     callback(messages);
   });
-
   return unsubscribe;
 };
-
 export const subscribeToUserConversations = (
   userId: string,
   callback: (conversations: Conversation[]) => void
@@ -222,7 +181,6 @@ export const subscribeToUserConversations = (
     where('participants', 'array-contains', userId),
     orderBy('lastUpdated', 'desc')
   );
-
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const conversations: Conversation[] = [];
     snapshot.forEach((doc) => {
@@ -230,15 +188,12 @@ export const subscribeToUserConversations = (
     });
     callback(conversations);
   });
-
   return unsubscribe;
 };
-
 export const getAllUsers = async (): Promise<User[]> => {
   const usersRef = collection(db, 'users');
   const snapshot = await getDocs(usersRef);
   const users: User[] = [];
-
   snapshot.forEach((doc) => {
     const data = doc.data();
     users.push({
@@ -253,6 +208,5 @@ export const getAllUsers = async (): Promise<User[]> => {
       photo_base64: data.photo_base64 || '',
     });
   });
-
   return users;
 };

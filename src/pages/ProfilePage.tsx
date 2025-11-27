@@ -2,13 +2,11 @@ import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Camera, MapPin, Mail, Shield, Save, Upload, FileText, Download, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db } from '../lib/auth';
 import CVAnalyzer from '../components/CVAnalyzer';
 import DeclareCrewButton from '../components/DeclareCrewButton';
 import SubscriptionCancellation from '../components/SubscriptionCancellation';
 import { ReputationDisplay } from '../components/ReputationDisplay';
-
 export default function ProfilePage() {
   const { currentUser, setCurrentUser } = useApp();
   const [isEditing, setIsEditing] = useState(false);
@@ -16,7 +14,6 @@ export default function ProfilePage() {
   const [uploadingCV, setUploadingCV] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cvInputRef = useRef<HTMLInputElement>(null);
-
   const [formData, setFormData] = useState({
     name: currentUser?.name || '',
     email: currentUser?.email || '',
@@ -24,9 +21,7 @@ export default function ProfilePage() {
     bio: currentUser?.bio || '',
     photo_base64: currentUser?.photoURL || '',
   });
-
   if (!currentUser) return null;
-
   const getDisplayPhoto = () => {
     const photo = formData.photo_base64 || currentUser.photoURL;
     if (photo && photo.trim() !== '') {
@@ -34,57 +29,45 @@ export default function ProfilePage() {
     }
     return `data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22200%22/%3E%3Ctext fill=%22%23999%22 font-family=%22sans-serif%22 font-size=%2260%22 dy=%2210.5rem%22 font-weight=%22bold%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22%3E${currentUser.name?.[0] || 'U'}%3C/text%3E%3C/svg%3E`;
   };
-
   const displayPhoto = getDisplayPhoto();
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (file.size > 500 * 1024) {
       alert('Image size should be less than 500KB');
       return;
     }
-
     const reader = new FileReader();
     reader.onload = () => {
       setFormData({ ...formData, photo_base64: reader.result as string });
     };
     reader.readAsDataURL(file);
   };
-
   const handleCVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
-
     const allowedTypes = [
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     ];
-
     if (!allowedTypes.includes(file.type)) {
       alert('Please upload a PDF, DOC, or DOCX file');
       return;
     }
-
     if (file.size > 5 * 1024 * 1024) {
       alert('CV file size should be less than 5MB');
       return;
     }
-
     setUploadingCV(true);
     try {
       console.log('Starting CV upload for user:', currentUser.uid);
       console.log('File details:', { name: file.name, type: file.type, size: file.size });
-
       const reader = new FileReader();
-
       reader.onload = async () => {
         try {
           const base64String = reader.result as string;
           console.log('File converted to base64');
-
           const userDocRef = doc(db, 'users', currentUser.uid);
           await updateDoc(userDocRef, {
             cvData: base64String,
@@ -95,13 +78,11 @@ export default function ProfilePage() {
             updated_at: new Date().toISOString(),
           });
           console.log('Firestore updated');
-
           setCurrentUser({
             ...currentUser,
             cvData: base64String,
             cvFileName: file.name,
           });
-
           alert('CV uploaded successfully!');
         } catch (error: any) {
           console.error('Error saving CV to Firestore:', error);
@@ -113,7 +94,6 @@ export default function ProfilePage() {
           }
         }
       };
-
       reader.onerror = () => {
         console.error('Error reading file');
         alert('Failed to read file. Please try again.');
@@ -122,7 +102,6 @@ export default function ProfilePage() {
           cvInputRef.current.value = '';
         }
       };
-
       reader.readAsDataURL(file);
     } catch (error: any) {
       console.error('Error uploading CV:', error);
@@ -133,10 +112,8 @@ export default function ProfilePage() {
       }
     }
   };
-
   const handleDeleteCV = async () => {
     if (!currentUser?.cvData || !window.confirm('Are you sure you want to delete your CV?')) return;
-
     try {
       const userDocRef = doc(db, 'users', currentUser.uid);
       await updateDoc(userDocRef, {
@@ -147,26 +124,22 @@ export default function ProfilePage() {
         cvUploadedAt: null,
         updated_at: new Date().toISOString(),
       });
-
       setCurrentUser({
         ...currentUser,
         cvData: undefined,
         cvFileName: undefined,
       });
-
       alert('CV deleted successfully');
     } catch (error) {
       console.error('Error deleting CV:', error);
       alert('Failed to delete CV. Please try again.');
     }
   };
-
   const handleDownloadCV = () => {
     if (!currentUser?.cvData || !currentUser?.cvFileName) {
       alert('No CV available to download');
       return;
     }
-
     const link = document.createElement('a');
     link.href = currentUser.cvData;
     link.download = currentUser.cvFileName;
@@ -174,10 +147,8 @@ export default function ProfilePage() {
     link.click();
     document.body.removeChild(link);
   };
-
   const handleSave = async () => {
     if (!currentUser) return;
-
     setSaving(true);
     try {
       const userDocRef = doc(db, 'users', currentUser.uid);
@@ -188,7 +159,6 @@ export default function ProfilePage() {
         photo_base64: formData.photo_base64,
         updated_at: new Date().toISOString(),
       });
-
       setCurrentUser({
         ...currentUser,
         name: formData.name,
@@ -196,7 +166,6 @@ export default function ProfilePage() {
         bio: formData.bio,
         photoURL: formData.photo_base64,
       });
-
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -205,14 +174,12 @@ export default function ProfilePage() {
       setSaving(false);
     }
   };
-
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Profile</h1>
         <p className="text-gray-600">Manage your account information</p>
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">
           <div className="glass-card rounded-2xl shadow-lg p-6">
@@ -239,7 +206,6 @@ export default function ProfilePage() {
                   className="hidden"
                 />
               </div>
-
               {isEditing && (
                 <button
                   onClick={() => fileInputRef.current?.click()}
@@ -250,7 +216,6 @@ export default function ProfilePage() {
                 </button>
               )}
             </div>
-
             <h2 className="text-2xl font-bold text-gray-900 mb-1 text-center">
               {currentUser.name}
             </h2>
@@ -276,7 +241,6 @@ export default function ProfilePage() {
                 {currentUser.role}
               </span>
             </div>
-
             <div className="space-y-3 text-sm text-gray-600">
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4" />
@@ -287,7 +251,6 @@ export default function ProfilePage() {
                 <span>{currentUser.country}</span>
               </div>
             </div>
-
             {currentUser.role === 'governor' && (
               <div className="mt-6 p-4 bg-gradient-to-r from-[#CBA135] to-[#B8941E] rounded-xl text-white">
                 <p className="text-sm font-bold mb-1">Governor Status</p>
@@ -296,7 +259,6 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
-
         <div className="lg:col-span-2">
           <div className="glass-card rounded-2xl shadow-lg p-6">
             <div className="flex items-center justify-between mb-6">
@@ -336,7 +298,6 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
-
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">Full Name</label>
@@ -348,7 +309,6 @@ export default function ProfilePage() {
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#D71920] focus:ring-2 focus:ring-[#D71920]/20 transition disabled:glass-light disabled:text-gray-600"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">Email Address</label>
                 <input
@@ -359,7 +319,6 @@ export default function ProfilePage() {
                 />
                 <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
               </div>
-
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">Country</label>
                 <input
@@ -370,7 +329,6 @@ export default function ProfilePage() {
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#D71920] focus:ring-2 focus:ring-[#D71920]/20 transition disabled:glass-light disabled:text-gray-600"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">
                   Membership Plan
@@ -382,7 +340,6 @@ export default function ProfilePage() {
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl glass-light text-gray-600 capitalize"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">Role</label>
                 <input
@@ -395,7 +352,6 @@ export default function ProfilePage() {
                   Role can only be changed by a Governor
                 </p>
               </div>
-
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">
                   Bio / About Me
@@ -409,7 +365,6 @@ export default function ProfilePage() {
                   placeholder="Tell us about yourself..."
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-bold text-gray-900 mb-2">
                   CV / Resume
@@ -417,7 +372,6 @@ export default function ProfilePage() {
                 <p className="text-xs text-gray-500 mb-3">
                   Upload your CV in PDF, DOC, or DOCX format (max 5MB)
                 </p>
-
                 {currentUser.cvData ? (
                   <div className="flex items-center gap-3 p-4 glass-light rounded-xl border-2 border-gray-200">
                     <div className="w-12 h-12 bg-gradient-to-r from-[#D71920] to-[#B91518] rounded-lg flex items-center justify-center">
@@ -460,7 +414,6 @@ export default function ProfilePage() {
                     </span>
                   </button>
                 )}
-
                 <input
                   ref={cvInputRef}
                   type="file"
@@ -473,11 +426,9 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
-
       <div className="mt-6">
         <ReputationDisplay userId={currentUser.uid} isOwnProfile={true} />
       </div>
-
       {currentUser.role === 'student' && (
         <div className="mt-6">
           <div className="glass-card rounded-2xl shadow-lg p-6">
@@ -495,7 +446,6 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
-
       {currentUser.cvUrl && (
         <div className="mt-6">
           <div className="glass-card rounded-2xl shadow-lg p-6">
@@ -504,7 +454,6 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
-
       {/* Subscription Management */}
       {currentUser.role === 'student' && (
         <div className="mt-6">

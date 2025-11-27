@@ -1,19 +1,4 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  query,
-  where,
-  getDocs,
-  increment,
-  Timestamp,
-  orderBy,
-  limit as firestoreLimit
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
-
+import { db } from '../lib/auth';
 export interface AffiliateAccount {
   id: string;
   userId: string;
@@ -30,7 +15,6 @@ export interface AffiliateAccount {
   createdAt: Timestamp;
   stripeAccountId?: string;
 }
-
 export interface AffiliateLink {
   id: string;
   affiliateId: string;
@@ -44,7 +28,6 @@ export interface AffiliateLink {
   commissionsEarned: number;
   createdAt: Timestamp;
 }
-
 export interface AffiliateClick {
   id: string;
   affiliateCode: string;
@@ -57,7 +40,6 @@ export interface AffiliateClick {
   converted: boolean;
   orderId?: string;
 }
-
 export interface Commission {
   id: string;
   affiliateId: string;
@@ -76,7 +58,6 @@ export interface Commission {
   paidAt?: Timestamp;
   payoutId?: string;
 }
-
 export interface Payout {
   id: string;
   affiliateId: string;
@@ -89,12 +70,10 @@ export interface Payout {
   processedAt?: Timestamp;
   failureReason?: string;
 }
-
 const DEFAULT_COMMISSION_RATE = 0.10;
 const MENTOR_COMMISSION_RATE = 0.15;
 const GOVERNOR_COMMISSION_RATE = 0.20;
 const MIN_PAYOUT_AMOUNT = 50;
-
 export const affiliateService = {
   generateAffiliateCode(userId: string, role: string): string {
     const prefix = role === 'governor' ? 'GOV' : role === 'mentor' ? 'MNT' : 'AFF';
@@ -105,13 +84,11 @@ export const affiliateService = {
     }
     return `${prefix}-${code}`;
   },
-
   getCommissionRate(role: string): number {
     if (role === 'governor') return GOVERNOR_COMMISSION_RATE;
     if (role === 'mentor') return MENTOR_COMMISSION_RATE;
     return DEFAULT_COMMISSION_RATE;
   },
-
   async createAffiliateAccount(
     userId: string,
     userName: string,
@@ -120,14 +97,11 @@ export const affiliateService = {
   ): Promise<string> {
     const accountRef = doc(db, 'affiliate_accounts', userId);
     const existingAccount = await getDoc(accountRef);
-
     if (existingAccount.exists()) {
       return existingAccount.data().affiliateCode;
     }
-
     const affiliateCode = this.generateAffiliateCode(userId, role);
     const commissionRate = this.getCommissionRate(role);
-
     const accountData: AffiliateAccount = {
       id: userId,
       userId,
@@ -143,22 +117,17 @@ export const affiliateService = {
       status: 'active',
       createdAt: Timestamp.now()
     };
-
     await setDoc(accountRef, accountData);
     return affiliateCode;
   },
-
   async getAffiliateAccount(userId: string): Promise<AffiliateAccount | null> {
     const accountRef = doc(db, 'affiliate_accounts', userId);
     const snapshot = await getDoc(accountRef);
-
     if (snapshot.exists()) {
       return snapshot.data() as AffiliateAccount;
     }
-
     return null;
   },
-
   async getAffiliateByCode(code: string): Promise<AffiliateAccount | null> {
     const q = query(
       collection(db, 'affiliate_accounts'),
@@ -166,14 +135,11 @@ export const affiliateService = {
       firestoreLimit(1)
     );
     const snapshot = await getDocs(q);
-
     if (!snapshot.empty) {
       return snapshot.docs[0].data() as AffiliateAccount;
     }
-
     return null;
   },
-
   async generateAffiliateLink(
     affiliateId: string,
     productId: string,
@@ -184,10 +150,8 @@ export const affiliateService = {
     if (!affiliate) {
       throw new Error('Affiliate account not found');
     }
-
     const linkRef = doc(collection(db, 'affiliate_links'));
     const affiliateUrl = `https://thecrewacademy.co/marketplace/${productId}?ref=${affiliate.affiliateCode}`;
-
     const linkData: AffiliateLink = {
       id: linkRef.id,
       affiliateId,
@@ -201,11 +165,9 @@ export const affiliateService = {
       commissionsEarned: 0,
       createdAt: Timestamp.now()
     };
-
     await setDoc(linkRef, linkData);
     return affiliateUrl;
   },
-
   async trackAffiliateClick(
     affiliateCode: string,
     productId: string,
@@ -214,7 +176,6 @@ export const affiliateService = {
   ): Promise<void> {
     const affiliate = await this.getAffiliateByCode(affiliateCode);
     if (!affiliate) return;
-
     const clickRef = doc(collection(db, 'affiliate_clicks'));
     const clickData: AffiliateClick = {
       id: clickRef.id,
@@ -227,21 +188,17 @@ export const affiliateService = {
       timestamp: Timestamp.now(),
       converted: false
     };
-
     await setDoc(clickRef, clickData);
-
     const accountRef = doc(db, 'affiliate_accounts', affiliate.userId);
     await updateDoc(accountRef, {
       totalClicks: increment(1)
     });
-
     const linkQuery = query(
       collection(db, 'affiliate_links'),
       where('affiliateId', '==', affiliate.userId),
       where('productId', '==', productId)
     );
     const linkSnapshot = await getDocs(linkQuery);
-
     if (!linkSnapshot.empty) {
       const linkRef = doc(db, 'affiliate_links', linkSnapshot.docs[0].id);
       await updateDoc(linkRef, {
@@ -249,7 +206,6 @@ export const affiliateService = {
       });
     }
   },
-
   async recordCommission(
     affiliateCode: string,
     orderId: string,
@@ -263,13 +219,10 @@ export const affiliateService = {
     if (!affiliate) {
       throw new Error('Invalid affiliate code');
     }
-
     if (affiliate.status !== 'active') {
       throw new Error('Affiliate account not active');
     }
-
     const commissionAmount = orderAmount * affiliate.commissionRate;
-
     const commissionRef = doc(collection(db, 'commissions'));
     const commissionData: Commission = {
       id: commissionRef.id,
@@ -287,23 +240,19 @@ export const affiliateService = {
       status: 'approved',
       createdAt: Timestamp.now()
     };
-
     await setDoc(commissionRef, commissionData);
-
     const accountRef = doc(db, 'affiliate_accounts', affiliate.userId);
     await updateDoc(accountRef, {
       totalConversions: increment(1),
       totalCommissions: increment(commissionAmount),
       pendingPayout: increment(commissionAmount)
     });
-
     const linkQuery = query(
       collection(db, 'affiliate_links'),
       where('affiliateId', '==', affiliate.userId),
       where('productId', '==', productId)
     );
     const linkSnapshot = await getDocs(linkQuery);
-
     if (!linkSnapshot.empty) {
       const linkRef = doc(db, 'affiliate_links', linkSnapshot.docs[0].id);
       await updateDoc(linkRef, {
@@ -311,7 +260,6 @@ export const affiliateService = {
         commissionsEarned: increment(commissionAmount)
       });
     }
-
     const clickQuery = query(
       collection(db, 'affiliate_clicks'),
       where('affiliateCode', '==', affiliateCode),
@@ -319,7 +267,6 @@ export const affiliateService = {
       where('converted', '==', false)
     );
     const clicks = await getDocs(clickQuery);
-
     clicks.forEach(async (clickDoc) => {
       await updateDoc(doc(db, 'affiliate_clicks', clickDoc.id), {
         converted: true,
@@ -327,7 +274,6 @@ export const affiliateService = {
       });
     });
   },
-
   async getAffiliateDashboard(userId: string): Promise<{
     account: AffiliateAccount | null;
     stats: {
@@ -342,7 +288,6 @@ export const affiliateService = {
     topProducts: Array<{ productId: string; productName: string; commissionsEarned: number }>;
   }> {
     const account = await this.getAffiliateAccount(userId);
-
     if (!account) {
       return {
         account: null,
@@ -358,11 +303,9 @@ export const affiliateService = {
         topProducts: []
       };
     }
-
     const conversionRate = account.totalClicks > 0
       ? (account.totalConversions / account.totalClicks) * 100
       : 0;
-
     const commissionsQuery = query(
       collection(db, 'commissions'),
       where('affiliateId', '==', userId),
@@ -371,7 +314,6 @@ export const affiliateService = {
     );
     const commissionsSnapshot = await getDocs(commissionsQuery);
     const recentCommissions = commissionsSnapshot.docs.map(doc => doc.data() as Commission);
-
     const linksQuery = query(
       collection(db, 'affiliate_links'),
       where('affiliateId', '==', userId),
@@ -387,7 +329,6 @@ export const affiliateService = {
         commissionsEarned: data.commissionsEarned
       };
     });
-
     return {
       account,
       stats: {
@@ -402,21 +343,17 @@ export const affiliateService = {
       topProducts
     };
   },
-
   async requestPayout(userId: string): Promise<{ success: boolean; message: string; payoutId?: string }> {
     const account = await this.getAffiliateAccount(userId);
-
     if (!account) {
       return { success: false, message: 'Affiliate account not found' };
     }
-
     if (account.pendingPayout < MIN_PAYOUT_AMOUNT) {
       return {
         success: false,
         message: `Minimum payout amount is $${MIN_PAYOUT_AMOUNT}. Current balance: $${account.pendingPayout.toFixed(2)}`
       };
     }
-
     const approvedCommissionsQuery = query(
       collection(db, 'commissions'),
       where('affiliateId', '==', userId),
@@ -424,7 +361,6 @@ export const affiliateService = {
     );
     const commissionsSnapshot = await getDocs(approvedCommissionsQuery);
     const commissionIds = commissionsSnapshot.docs.map(doc => doc.id);
-
     const payoutRef = doc(collection(db, 'payouts'));
     const payoutData: Payout = {
       id: payoutRef.id,
@@ -435,30 +371,25 @@ export const affiliateService = {
       method: 'stripe',
       createdAt: Timestamp.now()
     };
-
     await setDoc(payoutRef, payoutData);
-
     commissionsSnapshot.forEach(async (commissionDoc) => {
       await updateDoc(doc(db, 'commissions', commissionDoc.id), {
         status: 'pending',
         payoutId: payoutRef.id
       });
     });
-
     return {
       success: true,
       message: 'Payout request submitted successfully',
       payoutId: payoutRef.id
     };
   },
-
   async getAllAffiliateLinks(userId: string): Promise<AffiliateLink[]> {
     const q = query(
       collection(db, 'affiliate_links'),
       where('affiliateId', '==', userId),
       orderBy('createdAt', 'desc')
     );
-
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => doc.data() as AffiliateLink);
   }

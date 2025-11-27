@@ -1,20 +1,5 @@
-import { db } from '../lib/firebase';
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  limit,
-  Timestamp,
-  updateDoc,
-  doc,
-  increment,
-  getDoc,
-} from 'firebase/firestore';
+import { db } from '../lib/auth';
 import { openaiClient } from '../utils/openaiClient';
-
 export type ModerationCategory =
   | 'spam'
   | 'harassment'
@@ -25,11 +10,8 @@ export type ModerationCategory =
   | 'violence'
   | 'self-harm'
   | 'fraud';
-
 export type ModerationSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-
 export type ModerationAction = 'allow' | 'warn' | 'block' | 'ban' | 'escalate';
-
 export interface ModerationResult {
   allowed: boolean;
   severity: ModerationSeverity;
@@ -40,7 +22,6 @@ export interface ModerationResult {
   aiAnalysis?: string;
   ruleViolations?: string[];
 }
-
 export interface ModerationLog {
   id?: string;
   userId: string;
@@ -61,7 +42,6 @@ export interface ModerationLog {
   status: 'pending' | 'reviewed' | 'appealed' | 'resolved';
   appealReason?: string;
 }
-
 export interface ModerationInsights {
   totalViolations: number;
   violationsByCategory: Record<ModerationCategory, number>;
@@ -70,7 +50,6 @@ export interface ModerationInsights {
   recentViolations: ModerationLog[];
   pendingAppeals: number;
 }
-
 class AIModerationService {
   private badWords = [
     'spam',
@@ -107,7 +86,6 @@ class AIModerationService {
     'kys',
     'die',
   ];
-
   private spamPatterns = [
     /\b(buy|click|visit|check\s+out)\s+(now|here|this)/gi,
     /\b(limited\s+time|act\s+now|hurry|don't\s+miss)/gi,
@@ -115,48 +93,39 @@ class AIModerationService {
     /https?:\/\/[^\s]+/gi,
     /\b\w+\.com\b/gi,
   ];
-
   private async checkRuleBasedFilters(content: string): Promise<{
     violations: string[];
     severity: ModerationSeverity;
   }> {
     const violations: string[] = [];
     const lowerContent = content.toLowerCase();
-
     for (const word of this.badWords) {
       if (lowerContent.includes(word.toLowerCase())) {
         violations.push(`Contains inappropriate word: "${word}"`);
       }
     }
-
     for (const pattern of this.spamPatterns) {
       if (pattern.test(content)) {
         violations.push(`Matches spam pattern: ${pattern.source}`);
       }
     }
-
     if (content.length > 5000) {
       violations.push('Content too long (possible spam)');
     }
-
     const urlCount = (content.match(/https?:\/\//g) || []).length;
     if (urlCount > 3) {
       violations.push(`Too many URLs: ${urlCount}`);
     }
-
     const capsPercentage = (content.match(/[A-Z]/g) || []).length / content.length;
     if (capsPercentage > 0.7 && content.length > 20) {
       violations.push('Excessive caps (possible spam)');
     }
-
     let severity: ModerationSeverity = 'LOW';
     if (violations.length >= 1) severity = 'MEDIUM';
     if (violations.length >= 3) severity = 'HIGH';
     if (violations.length >= 5) severity = 'CRITICAL';
-
     return { violations, severity };
   }
-
   private async analyzeWithAI(
     content: string,
     contentType: string
@@ -168,11 +137,8 @@ class AIModerationService {
   }> {
     try {
       const prompt = `You are a content moderation AI. Analyze the following ${contentType} content and respond with ONLY a valid JSON object, no markdown formatting.
-
 Content: "${content}"
-
 Evaluate for: spam, harassment, scams, fraud, off-topic, explicit content, hate speech, violence, self-harm.
-
 Respond with ONLY valid JSON (no code blocks, no markdown):
 {
   "categories": ["spam", "harassment"],
@@ -180,36 +146,28 @@ Respond with ONLY valid JSON (no code blocks, no markdown):
   "confidence": 0.8,
   "analysis": "brief explanation"
 }
-
 severity must be: LOW, MEDIUM, HIGH, or CRITICAL
 confidence must be: 0.0 to 1.0
 categories must be from: spam, harassment, scam, off-topic, explicit, hate-speech, violence, self-harm, fraud`;
-
       const response = await openaiClient.sendMessage(
         [{ role: 'user', content: prompt }],
         'system-moderation'
       );
-
       let cleanedReply = response.reply || '{}';
-
       cleanedReply = cleanedReply
         .replace(/```json\s*/g, '')
         .replace(/```\s*/g, '')
         .replace(/^[\s\n]+|[\s\n]+$/g, '')
         .trim();
-
       if (!cleanedReply.startsWith('{')) {
         const jsonMatch = cleanedReply.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           cleanedReply = jsonMatch[0];
         }
       }
-
       const result = JSON.parse(cleanedReply);
-
       const validSeverities: ModerationSeverity[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
       const severity = validSeverities.includes(result.severity) ? result.severity : 'LOW';
-
       return {
         categories: Array.isArray(result.categories) ? result.categories : [],
         severity,
@@ -229,7 +187,6 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
       };
     }
   }
-
   private determineAction(
     severity: ModerationSeverity,
     categories: ModerationCategory[],
@@ -243,18 +200,14 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
     if (severity === 'MEDIUM') {
       return userViolationCount >= 3 ? 'block' : 'warn';
     }
-
     if (hasRuleViolations) {
       return 'warn';
     }
-
     if (categories.length > 0) {
       return userViolationCount >= 3 ? 'warn' : 'allow';
     }
-
     return 'allow';
   }
-
   async moderateContent(
     userId: string,
     userName: string,
@@ -264,7 +217,6 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
   ): Promise<ModerationResult> {
     const ruleCheck = await this.checkRuleBasedFilters(content);
     const aiAnalysis = await this.analyzeWithAI(content, contentType);
-
     const allCategories = [...new Set(aiAnalysis.categories)] as ModerationCategory[];
     const maxSeverity =
       ruleCheck.severity === 'HIGH' || aiAnalysis.severity === 'HIGH'
@@ -272,11 +224,9 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
         : ruleCheck.severity === 'MEDIUM' || aiAnalysis.severity === 'MEDIUM'
         ? 'MEDIUM'
         : 'LOW';
-
     const userViolations = await this.getUserViolationCount(userId);
     const hasRuleViolations = ruleCheck.violations.length > 0;
     const action = this.determineAction(maxSeverity, allCategories, userViolations, hasRuleViolations);
-
     const result: ModerationResult = {
       allowed: action === 'allow' || action === 'warn',
       severity: maxSeverity,
@@ -287,7 +237,6 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
       aiAnalysis: aiAnalysis.analysis,
       ruleViolations: ruleCheck.violations,
     };
-
     if (action !== 'allow') {
       await this.logViolation({
         userId,
@@ -306,68 +255,53 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
         status: action === 'escalate' ? 'pending' : 'reviewed',
       });
     }
-
     if (action === 'ban') {
       await this.applyBan(userId, maxSeverity);
     }
-
     return result;
   }
-
   private generateReason(categories: ModerationCategory[], violations: string[]): string {
     const reasons: string[] = [];
-
     if (categories.includes('spam')) reasons.push('spam content');
     if (categories.includes('harassment')) reasons.push('harassment/bullying');
     if (categories.includes('scam')) reasons.push('potential scam');
     if (categories.includes('fraud')) reasons.push('fraudulent content');
     if (categories.includes('explicit')) reasons.push('explicit content');
     if (categories.includes('hate-speech')) reasons.push('hate speech');
-
     if (violations.length > 0) {
       reasons.push(...violations.slice(0, 2));
     }
-
     return reasons.length > 0
       ? `Content flagged for: ${reasons.join(', ')}`
       : 'Content violated community guidelines';
   }
-
   private async getUserViolationCount(userId: string): Promise<number> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
     const q = query(
       collection(db, 'moderation_logs'),
       where('userId', '==', userId),
       where('timestamp', '>=', Timestamp.fromDate(thirtyDaysAgo))
     );
-
     const snapshot = await getDocs(q);
     return snapshot.size;
   }
-
   private async logViolation(log: ModerationLog): Promise<void> {
     const logData: any = { ...log };
-
     if (logData.contentId === undefined) {
       delete logData.contentId;
     }
-
     await addDoc(collection(db, 'moderation_logs'), logData);
-
     const userRef = doc(db, 'users', log.userId);
     await updateDoc(userRef, {
       moderationViolations: increment(1),
       lastViolation: log.timestamp,
     });
   }
-
   private async applyBan(userId: string, severity: ModerationSeverity): Promise<void> {
     const banDuration = severity === 'CRITICAL' ? 30 : severity === 'HIGH' ? 7 : 1;
     const banUntil = new Date();
     banUntil.setDate(banUntil.getDate() + banDuration);
-
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
       banned: true,
@@ -375,22 +309,17 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
       banReason: `Automated ban due to ${severity} severity violation`,
     });
   }
-
   async getInsights(): Promise<ModerationInsights> {
     const logsRef = collection(db, 'moderation_logs');
-
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
     const q = query(
       logsRef,
       where('timestamp', '>=', Timestamp.fromDate(thirtyDaysAgo)),
       orderBy('timestamp', 'desc')
     );
-
     const snapshot = await getDocs(q);
     const logs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as ModerationLog));
-
     const violationsByCategory: Record<ModerationCategory, number> = {
       spam: 0,
       harassment: 0,
@@ -402,36 +331,28 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
       'self-harm': 0,
       fraud: 0,
     };
-
     const violationsBySeverity: Record<ModerationSeverity, number> = {
       LOW: 0,
       MEDIUM: 0,
       HIGH: 0,
       CRITICAL: 0,
     };
-
     const userViolations: Record<string, { userName: string; count: number }> = {};
-
     logs.forEach((log) => {
       log.categories.forEach((cat) => {
         violationsByCategory[cat]++;
       });
-
       violationsBySeverity[log.severity]++;
-
       if (!userViolations[log.userId]) {
         userViolations[log.userId] = { userName: log.userName, count: 0 };
       }
       userViolations[log.userId].count++;
     });
-
     const topOffenders = Object.entries(userViolations)
       .map(([userId, data]) => ({ userId, userName: data.userName, count: data.count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
-
     const pendingAppeals = logs.filter((log) => log.status === 'appealed').length;
-
     return {
       totalViolations: logs.length,
       violationsByCategory,
@@ -441,7 +362,6 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
       pendingAppeals,
     };
   }
-
   async submitAppeal(logId: string, appealReason: string): Promise<void> {
     const logRef = doc(db, 'moderation_logs', logId);
     await updateDoc(logRef, {
@@ -450,21 +370,16 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
       appealedAt: Timestamp.now(),
     });
   }
-
   async reviewAppeal(logId: string, approved: boolean, reviewedBy: string): Promise<void> {
     const logRef = doc(db, 'moderation_logs', logId);
     const logDoc = await getDoc(logRef);
-
     if (!logDoc.exists()) return;
-
     const log = logDoc.data() as ModerationLog;
-
     await updateDoc(logRef, {
       status: 'resolved',
       reviewedBy,
       reviewedAt: Timestamp.now(),
     });
-
     if (approved && log.userId) {
       const userRef = doc(db, 'users', log.userId);
       await updateDoc(userRef, {
@@ -475,7 +390,6 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
       });
     }
   }
-
   async checkUserBanStatus(userId: string): Promise<{
     banned: boolean;
     banUntil?: Date;
@@ -483,13 +397,10 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
   }> {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
-
     if (!userDoc.exists()) {
       return { banned: false };
     }
-
     const userData = userDoc.data();
-
     if (userData.banned && userData.banUntil) {
       const banUntil = userData.banUntil.toDate();
       if (banUntil < new Date()) {
@@ -500,16 +411,13 @@ categories must be from: spam, harassment, scam, off-topic, explicit, hate-speec
         });
         return { banned: false };
       }
-
       return {
         banned: true,
         banUntil,
         banReason: userData.banReason,
       };
     }
-
     return { banned: false };
   }
 }
-
 export const aiModerationService = new AIModerationService();

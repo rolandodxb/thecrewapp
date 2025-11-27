@@ -1,24 +1,20 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Brain, Send, AlertCircle, Loader2 } from 'lucide-react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db, auth } from '../../../lib/firebase';
+import { supabase, auth } from '../../../lib/auth';
 import { openaiClient } from '../../../utils/openaiClient';
-
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
   tokensUsed?: number;
 }
-
 export default function AIAssistantPanel() {
   const [prompt, setPrompt] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [checkingStatus, setCheckingStatus] = useState(true);
-
   useEffect(() => {
     const checkAIStatus = async () => {
       try {
@@ -33,32 +29,25 @@ export default function AIAssistantPanel() {
         setCheckingStatus(false);
       }
     };
-
     checkAIStatus();
   }, []);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || !aiEnabled || loading) return;
-
     const userMessage: Message = {
       role: 'user',
       content: prompt,
       timestamp: new Date(),
     };
-
     setMessages((prev) => [...prev, userMessage]);
     setPrompt('');
     setLoading(true);
-
     const assistantMessage: Message = {
       role: 'assistant',
       content: '',
       timestamp: new Date(),
     };
-
     setMessages((prev) => [...prev, assistantMessage]);
-
     try {
       const chatMessages = [
         {
@@ -74,14 +63,11 @@ export default function AIAssistantPanel() {
           content: userMessage.content,
         },
       ];
-
       const userId = auth.currentUser?.uid;
       if (!userId) {
         throw new Error('User not authenticated');
       }
-
       let streamedContent = '';
-
       await openaiClient.streamChat(chatMessages, {
         userId,
         onChunk: (content) => {
@@ -133,7 +119,6 @@ export default function AIAssistantPanel() {
       setLoading(false);
     }
   };
-
   if (checkingStatus) {
     return (
       <motion.div
@@ -148,7 +133,6 @@ export default function AIAssistantPanel() {
       </motion.div>
     );
   }
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -175,7 +159,6 @@ export default function AIAssistantPanel() {
           </span>
         </div>
       </div>
-
       {!aiEnabled && (
         <div className="mx-6 mt-4 p-3 bg-[#D71920]/10 border border-red-300 rounded-lg flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
@@ -187,7 +170,6 @@ export default function AIAssistantPanel() {
           </div>
         </div>
       )}
-
       <div className="p-6">
         <div className="space-y-3 max-h-96 overflow-y-auto mb-4">
           {messages.length === 0 ? (
@@ -234,7 +216,6 @@ export default function AIAssistantPanel() {
             </motion.div>
           )}
         </div>
-
         <form onSubmit={handleSubmit}>
           <div className="flex gap-2">
             <textarea

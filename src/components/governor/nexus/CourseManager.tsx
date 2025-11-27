@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BookOpen, Trash2, Eye, EyeOff, Video, FileText, Search, Award, Plus } from 'lucide-react';
 import { getAllCourses, deleteCourse, Course } from '../../../services/courseService';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
+import { supabase } from '../../../lib/auth';
 import { getExamByCourseId } from '../../../services/examService';
 import ExamCreationForm from '../../ExamCreationForm';
 import { useApp } from '../../../context/AppContext';
-
 export default function CourseManager() {
   const { currentUser } = useApp();
   const [courses, setCourses] = useState<Course[]>([]);
@@ -18,17 +16,14 @@ export default function CourseManager() {
   const [examStatuses, setExamStatuses] = useState<Record<string, boolean>>({});
   const [showExamForm, setShowExamForm] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-
   useEffect(() => {
     loadCourses();
   }, []);
-
   const loadCourses = async () => {
     setLoading(true);
     try {
       const allCourses = await getAllCourses();
       setCourses(allCourses);
-
       const statuses: Record<string, boolean> = {};
       for (const course of allCourses) {
         const exam = await getExamByCourseId(course.id);
@@ -41,15 +36,18 @@ export default function CourseManager() {
       setLoading(false);
     }
   };
-
   const handleSuppressCourse = async (courseId: string, currentlySuppressed: boolean) => {
     setActionInProgress(courseId);
     try {
-      const courseRef = doc(db, 'courses', courseId);
-      await updateDoc(courseRef, {
-        suppressed: !currentlySuppressed,
-        suppressed_at: !currentlySuppressed ? new Date().toISOString() : null,
-      });
+      const { error } = await supabase
+        .from('courses')
+        .update({
+          suppressed: !currentlySuppressed,
+          suppressed_at: !currentlySuppressed ? new Date().toISOString() : null,
+        })
+        .eq('id', courseId);
+
+      if (error) throw error;
       await loadCourses();
     } catch (error) {
       console.error('Error suppressing course:', error);
@@ -58,12 +56,10 @@ export default function CourseManager() {
       setActionInProgress(null);
     }
   };
-
   const handleDeleteCourse = async (course: Course) => {
     if (!confirm(`Are you sure you want to permanently delete "${course.title}"? This action cannot be undone.`)) {
       return;
     }
-
     setActionInProgress(course.id);
     try {
       await deleteCourse(course.id, course.pdf_path);
@@ -75,16 +71,13 @@ export default function CourseManager() {
       setActionInProgress(null);
     }
   };
-
   const handleAddExam = (course: Course) => {
     setSelectedCourse(course);
     setShowExamForm(true);
   };
-
   const handleExamCreated = () => {
     loadCourses();
   };
-
   const filteredCourses = courses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          course.instructor.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -92,7 +85,6 @@ export default function CourseManager() {
     const matchesType = filterType === 'all' || course.content_type === filterType;
     return matchesSearch && matchesType;
   });
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -103,7 +95,6 @@ export default function CourseManager() {
         <BookOpen className="w-6 h-6 text-gray-700" />
         <h2 className="text-xl font-bold text-gray-900">Course Management</h2>
       </div>
-
       <div className="space-y-4 mb-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600" />
@@ -115,7 +106,6 @@ export default function CourseManager() {
             className="w-full pl-10 pr-4 py-2 glass-light border border-gray-200 rounded-xl text-gray-900 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
           />
         </div>
-
         <div className="flex gap-2">
           <button
             onClick={() => setFilterType('all')}
@@ -151,7 +141,6 @@ export default function CourseManager() {
           </button>
         </div>
       </div>
-
       {loading ? (
         <div className="text-center py-12 text-gray-600">Loading courses...</div>
       ) : filteredCourses.length === 0 ? (
@@ -163,7 +152,6 @@ export default function CourseManager() {
           {filteredCourses.map((course) => {
             const isSuppressed = (course as any).suppressed === true;
             const isProcessing = actionInProgress === course.id;
-
             return (
               <motion.div
                 key={course.id}
@@ -250,7 +238,6 @@ export default function CourseManager() {
           })}
         </div>
       )}
-
       <div className="mt-4 pt-4 border-t border-gray-200">
         <div className="text-sm text-gray-600">
           Total: {filteredCourses.length} course(s) •
@@ -258,7 +245,6 @@ export default function CourseManager() {
           With Exams: {Object.values(examStatuses).filter(Boolean).length}
         </div>
       </div>
-
       {showExamForm && selectedCourse && currentUser && (
         <ExamCreationForm
           moduleId={selectedCourse.main_module_id || selectedCourse.submodule_id || 'default'}

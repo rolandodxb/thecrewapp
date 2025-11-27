@@ -1,5 +1,4 @@
-import { doc, getDoc, setDoc, updateDoc, onSnapshot, Timestamp, collection, addDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/auth';
 
 export type FeatureKey =
   | 'chat'
@@ -30,8 +29,6 @@ export interface FeatureShutdownData {
   [key: string]: FeatureShutdown;
 }
 
-const FEATURES_SHUTDOWN_DOC = 'systemSettings/featuresShutdown';
-
 export const FEATURE_LABELS: Record<FeatureKey, string> = {
   chat: 'Private Chat',
   modules: 'Training Modules',
@@ -50,11 +47,11 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
 
 async function addAuditLog(action: string, details: any, performedBy: string) {
   try {
-    await addDoc(collection(db, 'auditLogs'), {
+    await supabase.from('audit_logs').insert({
       action,
       details,
-      performedBy,
-      timestamp: Timestamp.now(),
+      performed_by: performedBy,
+      timestamp: new Date().toISOString(),
       category: 'FEATURE_SHUTDOWN'
     });
   } catch (error) {
@@ -64,24 +61,23 @@ async function addAuditLog(action: string, details: any, performedBy: string) {
 
 export async function getFeatureShutdownStatus(featureKey: FeatureKey): Promise<FeatureShutdown | null> {
   try {
-    const docRef = doc(db, 'systemSettings', 'featuresShutdown');
-    const docSnap = await getDoc(docRef);
+    const { data, error } = await supabase
+      .from('feature_shutdowns')
+      .select('*')
+      .eq('feature_key', featureKey)
+      .maybeSingle();
 
-    if (!docSnap.exists()) {
-      return null;
-    }
-
-    const data = docSnap.data();
-    const featureData = data[featureKey];
-
-    if (!featureData) {
-      return null;
-    }
+    if (error) throw error;
+    if (!data) return null;
 
     return {
-      ...featureData,
-      maintenanceEndsAt: featureData.maintenanceEndsAt?.toDate() || null,
-      updatedAt: featureData.updatedAt?.toDate() || new Date()
+      featureKey: data.feature_key,
+      isShutdown: data.is_shutdown,
+      shutdownReason: data.shutdown_reason,
+      maintenanceMessage: data.maintenance_message,
+      maintenanceEndsAt: data.maintenance_ends_at ? new Date(data.maintenance_ends_at) : null,
+      updatedBy: data.updated_by,
+      updatedAt: new Date(data.updated_at)
     };
   } catch (error) {
     console.error('Error getting feature shutdown status:', error);
@@ -91,30 +87,28 @@ export async function getFeatureShutdownStatus(featureKey: FeatureKey): Promise<
 
 export async function getAllFeatureShutdowns(): Promise<FeatureShutdownData> {
   try {
-    const docRef = doc(db, 'systemSettings', 'featuresShutdown');
-    const docSnap = await getDoc(docRef);
+    const { data, error } = await supabase
+      .from('feature_shutdowns')
+      .select('*');
 
-    if (!docSnap.exists()) {
-      return {};
-    }
+    if (error) throw error;
+    if (!data) return {};
 
-    const data = docSnap.data();
     const result: FeatureShutdownData = {};
-
-    Object.keys(data).forEach((key) => {
-      const featureData = data[key];
-      result[key] = {
-        ...featureData,
-        maintenanceEndsAt: featureData.maintenanceEndsAt?.toDate() || null,
-        updatedAt: featureData.updatedAt?.toDate() || new Date()
+    data.forEach((row: any) => {
+      result[row.feature_key] = {
+        featureKey: row.feature_key,
+        isShutdown: row.is_shutdown,
+        shutdownReason: row.shutdown_reason,
+        maintenanceMessage: row.maintenance_message,
+        maintenanceEndsAt: row.maintenance_ends_at ? new Date(row.maintenance_ends_at) : null,
+        updatedBy: row.updated_by,
+        updatedAt: new Date(row.updated_at)
       };
     });
 
     return result;
   } catch (error: any) {
-    if (error?.code === 'permission-denied') {
-      return {};
-    }
     console.error('Error getting all feature shutdowns:', error);
     return {};
   }
@@ -123,41 +117,26 @@ export async function getAllFeatureShutdowns(): Promise<FeatureShutdownData> {
 export function subscribeToFeatureShutdowns(
   callback: (shutdowns: FeatureShutdownData) => void
 ): () => void {
-  const docRef = doc(db, 'systemSettings', 'featuresShutdown');
-
-  const unsubscribe = onSnapshot(
-    docRef,
-    (docSnap) => {
-      if (!docSnap.exists()) {
-        callback({});
-        return;
+  const channel = supabase
+    .channel('feature-shutdowns')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'feature_shutdowns',
+      },
+      () => {
+        getAllFeatureShutdowns().then(callback);
       }
+    )
+    .subscribe();
 
-      const data = docSnap.data();
-      const result: FeatureShutdownData = {};
+  getAllFeatureShutdowns().then(callback);
 
-      Object.keys(data).forEach((key) => {
-        const featureData = data[key];
-        result[key] = {
-          ...featureData,
-          maintenanceEndsAt: featureData.maintenanceEndsAt?.toDate() || null,
-          updatedAt: featureData.updatedAt?.toDate() || new Date()
-        };
-      });
-
-      callback(result);
-    },
-    (error: any) => {
-      if (error?.code === 'permission-denied') {
-        callback({});
-        return;
-      }
-      console.error('Error subscribing to feature shutdowns:', error);
-      callback({});
-    }
-  );
-
-  return unsubscribe;
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 export async function activateFeatureShutdown(
@@ -168,31 +147,23 @@ export async function activateFeatureShutdown(
   performedBy: string
 ): Promise<void> {
   try {
-    const docRef = doc(db, 'systemSettings', 'featuresShutdown');
-
     const safePerformedBy = performedBy || 'UNKNOWN';
 
-    const shutdownData = {
-      featureKey,
-      isShutdown: true,
-      shutdownReason,
-      maintenanceMessage,
-      maintenanceEndsAt: Timestamp.fromDate(maintenanceEndsAt),
-      updatedBy: safePerformedBy,
-      updatedAt: Timestamp.now()
-    };
-
-    const docSnap = await getDoc(docRef);
-
-    if (!docSnap.exists()) {
-      await setDoc(docRef, {
-        [featureKey]: shutdownData
+    const { error } = await supabase
+      .from('feature_shutdowns')
+      .upsert({
+        feature_key: featureKey,
+        is_shutdown: true,
+        shutdown_reason: shutdownReason,
+        maintenance_message: maintenanceMessage,
+        maintenance_ends_at: maintenanceEndsAt.toISOString(),
+        updated_by: safePerformedBy,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'feature_key'
       });
-    } else {
-      await updateDoc(docRef, {
-        [featureKey]: shutdownData
-      });
-    }
+
+    if (error) throw error;
 
     await addAuditLog(
       'FEATURE_SHUTDOWN_ACTIVATED',
@@ -215,15 +186,18 @@ export async function deactivateFeatureShutdown(
   performedBy: string
 ): Promise<void> {
   try {
-    const docRef = doc(db, 'systemSettings', 'featuresShutdown');
-
     const safePerformedBy = performedBy || 'UNKNOWN';
 
-    await updateDoc(docRef, {
-      [`${featureKey}.isShutdown`]: false,
-      [`${featureKey}.updatedBy`]: safePerformedBy,
-      [`${featureKey}.updatedAt`]: Timestamp.now()
-    });
+    const { error } = await supabase
+      .from('feature_shutdowns')
+      .update({
+        is_shutdown: false,
+        updated_by: safePerformedBy,
+        updated_at: new Date().toISOString()
+      })
+      .eq('feature_key', featureKey);
+
+    if (error) throw error;
 
     await addAuditLog(
       'FEATURE_SHUTDOWN_DEACTIVATED',
@@ -247,13 +221,16 @@ export async function checkAndAutoRestoreFeatures(): Promise<void> {
         shutdown.maintenanceEndsAt &&
         shutdown.maintenanceEndsAt < now
       ) {
-        const docRef = doc(db, 'systemSettings', 'featuresShutdown');
+        const { error } = await supabase
+          .from('feature_shutdowns')
+          .update({
+            is_shutdown: false,
+            updated_by: 'SYSTEM_AUTO_RESTORE',
+            updated_at: new Date().toISOString()
+          })
+          .eq('feature_key', featureKey);
 
-        await updateDoc(docRef, {
-          [`${featureKey}.isShutdown`]: false,
-          [`${featureKey}.updatedBy`]: 'SYSTEM_AUTO_RESTORE',
-          [`${featureKey}.updatedAt`]: Timestamp.now()
-        });
+        if (error) throw error;
 
         await addAuditLog(
           'FEATURE_SHUTDOWN_AUTO_RESTORED',

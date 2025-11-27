@@ -1,13 +1,9 @@
-import { db } from '../lib/firebase';
-import { collection, getDocs, addDoc, Timestamp } from 'firebase/firestore';
-
+import { db } from '../lib/auth';
 export async function initializeUpdates() {
   try {
     const updatesSnapshot = await getDocs(collection(db, 'updates'));
-
     if (updatesSnapshot.empty) {
       console.log('Initializing updates collection with recent changes...');
-
       const updates = [
         {
           type: 'feature',
@@ -77,10 +73,8 @@ export async function initializeUpdates() {
           notifyUsers: false
         }
       ];
-
       const promises = updates.map(update => addDoc(collection(db, 'updates'), update));
       await Promise.all(promises);
-
       console.log(`Successfully initialized ${updates.length} updates`);
       return true;
     } else {

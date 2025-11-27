@@ -3,10 +3,8 @@ import { DollarSign, TrendingUp, TrendingDown, Users, Package, CreditCard, Downl
 import { motion } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, getDocs, where, orderBy, Timestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db } from '../lib/auth';
 import { formatPrice } from '../services/stripeService';
-
 interface RevenueData {
   totalRevenue: number;
   monthlyRevenue: number;
@@ -15,7 +13,6 @@ interface RevenueData {
   totalTransactions: number;
   activeSubscriptions: number;
 }
-
 interface Transaction {
   id: string;
   type: 'subscription' | 'marketplace';
@@ -24,7 +21,6 @@ interface Transaction {
   description: string;
   status: string;
 }
-
 export default function FinanceDashboard() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
@@ -39,13 +35,11 @@ export default function FinanceDashboard() {
   });
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month');
-
   useEffect(() => {
     if (currentUser?.role === 'finance' || currentUser?.role === 'governor') {
       loadFinanceData();
     }
   }, [currentUser, timeRange]);
-
   const loadFinanceData = async () => {
     setLoading(true);
     try {
@@ -59,7 +53,6 @@ export default function FinanceDashboard() {
       } else {
         startDate.setFullYear(now.getFullYear() - 1);
       }
-
       // Get marketplace orders
       const ordersQuery = query(
         collection(db, 'orders'),
@@ -67,10 +60,8 @@ export default function FinanceDashboard() {
         orderBy('createdAt', 'desc')
       );
       const ordersSnapshot = await getDocs(ordersQuery);
-
       let marketplaceTotal = 0;
       const transactions: Transaction[] = [];
-
       ordersSnapshot.forEach((doc) => {
         const order = doc.data();
         marketplaceTotal += order.totalAmount || 0;
@@ -83,14 +74,11 @@ export default function FinanceDashboard() {
           status: order.status
         });
       });
-
       // Get subscription data
       const usersQuery = query(collection(db, 'users'));
       const usersSnapshot = await getDocs(usersQuery);
-
       let subscriptionTotal = 0;
       let activeSubscriptions = 0;
-
       usersSnapshot.forEach((doc) => {
         const user = doc.data();
         if (user.plan === 'pro') {
@@ -101,7 +89,6 @@ export default function FinanceDashboard() {
           activeSubscriptions++;
         }
       });
-
       setRevenueData({
         totalRevenue: marketplaceTotal + subscriptionTotal,
         monthlyRevenue: marketplaceTotal + subscriptionTotal,
@@ -110,7 +97,6 @@ export default function FinanceDashboard() {
         totalTransactions: transactions.length,
         activeSubscriptions
       });
-
       setRecentTransactions(transactions.slice(0, 10));
     } catch (error) {
       console.error('Error loading finance data:', error);
@@ -118,7 +104,6 @@ export default function FinanceDashboard() {
       setLoading(false);
     }
   };
-
   const downloadReport = () => {
     const csvContent = [
       ['Transaction ID', 'Type', 'Amount', 'Date', 'Description', 'Status'],
@@ -131,7 +116,6 @@ export default function FinanceDashboard() {
         t.status
       ])
     ].map(row => row.join(',')).join('\n');
-
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -139,7 +123,6 @@ export default function FinanceDashboard() {
     a.download = `finance-report-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
-
   if (!currentUser || (currentUser.role !== 'finance' && currentUser.role !== 'governor')) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-red-50 to-gray-100 flex items-center justify-center p-4">
@@ -159,7 +142,6 @@ export default function FinanceDashboard() {
       </div>
     );
   }
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -167,7 +149,6 @@ export default function FinanceDashboard() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-green-50 to-gray-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -203,7 +184,6 @@ export default function FinanceDashboard() {
             </div>
           </div>
         </div>
-
         {/* Revenue Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <motion.div
@@ -220,7 +200,6 @@ export default function FinanceDashboard() {
             <p className="text-gray-600 text-sm mb-1">Total Revenue</p>
             <p className="text-2xl font-bold text-gray-900">{formatPrice(revenueData.totalRevenue)}</p>
           </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -237,7 +216,6 @@ export default function FinanceDashboard() {
             <p className="text-2xl font-bold text-gray-900">{formatPrice(revenueData.subscriptionRevenue)}</p>
             <p className="text-xs text-gray-500 mt-1">{revenueData.activeSubscriptions} active</p>
           </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -253,7 +231,6 @@ export default function FinanceDashboard() {
             <p className="text-gray-600 text-sm mb-1">Marketplace</p>
             <p className="text-2xl font-bold text-gray-900">{formatPrice(revenueData.marketplaceRevenue)}</p>
           </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -270,7 +247,6 @@ export default function FinanceDashboard() {
             <p className="text-2xl font-bold text-gray-900">{revenueData.totalTransactions}</p>
           </motion.div>
         </div>
-
         {/* Recent Transactions */}
         <div className="bg-white/80 backdrop-blur-md rounded-xl border border-gray-200/50 shadow-lg overflow-hidden">
           <div className="p-6 border-b border-gray-200">

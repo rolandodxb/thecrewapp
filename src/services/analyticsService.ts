@@ -1,15 +1,4 @@
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  Timestamp,
-  orderBy,
-  limit,
-  getCountFromServer,
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
-
+import { db } from '../lib/auth';
 export interface AnalyticsData {
   activeUsers: number;
   totalUsers: number;
@@ -39,12 +28,10 @@ export interface AnalyticsData {
     count: number;
   }>;
 }
-
 export async function getAnalyticsSummary(): Promise<AnalyticsData> {
   const now = Timestamp.now();
   const oneWeekAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
   const oneHourAgo = Timestamp.fromDate(new Date(Date.now() - 60 * 60 * 1000));
-
   const [
     totalUsersSnapshot,
     activeUsersSnapshot,
@@ -68,7 +55,6 @@ export async function getAnalyticsSummary(): Promise<AnalyticsData> {
     getDocs(collection(db, 'courses')),
     getCountFromServer(collection(db, 'course_enrollments')),
   ]);
-
   const usersSnapshot = await getDocs(collection(db, 'users'));
   const subscriptionsByPlan = {
     free: 0,
@@ -76,7 +62,6 @@ export async function getAnalyticsSummary(): Promise<AnalyticsData> {
     pro: 0,
     vip: 0,
   };
-
   usersSnapshot.docs.forEach((doc) => {
     const user = doc.data();
     const plan = (user.subscription?.toLowerCase() || 'free') as keyof typeof subscriptionsByPlan;
@@ -84,17 +69,14 @@ export async function getAnalyticsSummary(): Promise<AnalyticsData> {
       subscriptionsByPlan[plan]++;
     }
   });
-
   const conversationsSnapshot = await getDocs(collection(db, 'conversations'));
   const conversationMessages: Record<string, number> = {};
-
   const messagesSnapshot = await getDocs(collection(db, 'messages'));
   messagesSnapshot.docs.forEach((doc) => {
     const message = doc.data();
     const convId = message.conversationId;
     conversationMessages[convId] = (conversationMessages[convId] || 0) + 1;
   });
-
   const topConversations = conversationsSnapshot.docs
     .map((doc) => ({
       id: doc.id,
@@ -103,10 +85,8 @@ export async function getAnalyticsSummary(): Promise<AnalyticsData> {
     }))
     .sort((a, b) => b.messageCount - a.messageCount)
     .slice(0, 10);
-
   const userGrowth = await getUserGrowthData(30);
   const messageActivity = await getMessageActivityData(30);
-
   return {
     activeUsers: activeUsersSnapshot.data().count,
     totalUsers: totalUsersSnapshot.data().count,
@@ -122,15 +102,12 @@ export async function getAnalyticsSummary(): Promise<AnalyticsData> {
     messageActivity,
   };
 }
-
 async function getUserGrowthData(days: number) {
   const data: Array<{ date: string; count: number }> = [];
   const usersSnapshot = await getDocs(
     query(collection(db, 'users'), orderBy('createdAt', 'desc'), limit(1000))
   );
-
   const dailyCounts: Record<string, number> = {};
-
   usersSnapshot.docs.forEach((doc) => {
     const user = doc.data();
     if (user.createdAt) {
@@ -150,7 +127,6 @@ async function getUserGrowthData(days: number) {
       dailyCounts[dateStr] = (dailyCounts[dateStr] || 0) + 1;
     }
   });
-
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
@@ -160,18 +136,14 @@ async function getUserGrowthData(days: number) {
       count: dailyCounts[dateStr] || 0,
     });
   }
-
   return data;
 }
-
 async function getMessageActivityData(days: number) {
   const data: Array<{ date: string; count: number }> = [];
   const messagesSnapshot = await getDocs(
     query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(5000))
   );
-
   const dailyCounts: Record<string, number> = {};
-
   messagesSnapshot.docs.forEach((doc) => {
     const message = doc.data();
     if (message.createdAt) {
@@ -191,7 +163,6 @@ async function getMessageActivityData(days: number) {
       dailyCounts[dateStr] = (dailyCounts[dateStr] || 0) + 1;
     }
   });
-
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
@@ -201,14 +172,11 @@ async function getMessageActivityData(days: number) {
       count: dailyCounts[dateStr] || 0,
     });
   }
-
   return data;
 }
-
 export async function getRealtimeMetrics() {
   const oneMinuteAgo = Timestamp.fromDate(new Date(Date.now() - 60 * 1000));
   const fiveMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
-
   const [recentMessagesSnapshot, activeUsersSnapshot] = await Promise.all([
     getCountFromServer(
       query(collection(db, 'messages'), where('createdAt', '>=', oneMinuteAgo))
@@ -217,7 +185,6 @@ export async function getRealtimeMetrics() {
       query(collection(db, 'userPresence'), where('lastSeen', '>=', fiveMinutesAgo))
     ),
   ]);
-
   return {
     messagesPerMinute: recentMessagesSnapshot.data().count,
     activeNow: activeUsersSnapshot.data().count,

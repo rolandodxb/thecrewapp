@@ -1,8 +1,6 @@
 import { motion } from 'framer-motion';
 import { Clock, User, Activity } from 'lucide-react';
 import { useFirestoreCollection } from '../../../hooks/useFirestoreRealtime';
-import { orderBy, limit } from 'firebase/firestore';
-
 interface AuditEvent {
   id: string;
   timestamp: any;
@@ -11,22 +9,18 @@ interface AuditEvent {
   userName?: string;
   details?: string;
 }
-
 export default function RealtimeLogs() {
   const { data: events, loading } = useFirestoreCollection<AuditEvent>('audit');
-
   const sortedEvents = [...events].sort((a, b) => {
     const timeA = a.timestamp?.toDate?.() || new Date(0);
     const timeB = b.timestamp?.toDate?.() || new Date(0);
     return timeB.getTime() - timeA.getTime();
   }).slice(0, 10);
-
   const formatTimestamp = (timestamp: any) => {
     if (!timestamp) return 'Unknown';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleString();
   };
-
   const getEventColor = (eventType: string) => {
     switch (eventType.toLowerCase()) {
       case 'login':
@@ -45,7 +39,6 @@ export default function RealtimeLogs() {
         return 'text-blue-700 bg-blue-50 border-blue-300';
     }
   };
-
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
@@ -59,7 +52,6 @@ export default function RealtimeLogs() {
           <span className="ml-auto text-xs text-gray-600 px-2 py-1 glass-bubble rounded-full">{events.length} events</span>
         )}
       </div>
-
       <div className="space-y-2 max-h-96 overflow-y-auto">
         {loading ? (
           <div className="text-center py-8 text-gray-600">Loading logs...</div>

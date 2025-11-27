@@ -4,10 +4,8 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db } from '../../lib/auth';
 import SystemAnnouncementBanner from '../SystemAnnouncementBanner';
-
 export default function Navbar() {
   const { currentUser, logout } = useApp();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -19,23 +17,18 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const isCommunityPage = location.pathname === '/chat';
-
   useEffect(() => {
     if (!currentUser) return;
-
     const q = query(
       collection(db, 'notifications'),
       where('userId', '==', currentUser.uid),
       where('read', '==', false)
     );
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setUnreadCount(snapshot.size);
     });
-
     return unsubscribe;
   }, [currentUser]);
-
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
@@ -48,7 +41,6 @@ export default function Navbar() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
   useEffect(() => {
     function updateProfileMenuPosition() {
       if (showProfileMenu && profileButtonRef.current) {
@@ -59,7 +51,6 @@ export default function Navbar() {
         });
       }
     }
-
     if (showProfileMenu) {
       updateProfileMenuPosition();
       window.addEventListener('scroll', updateProfileMenuPosition, true);
@@ -70,7 +61,6 @@ export default function Navbar() {
       };
     }
   }, [showProfileMenu]);
-
   const handleProfileMenuToggle = () => {
     if (showProfileMenu) {
       setShowProfileMenu(false);
@@ -79,9 +69,7 @@ export default function Navbar() {
       setShowProfileMenu(true);
     }
   };
-
   if (!currentUser) return null;
-
   const getNavLinks = () => {
     if (currentUser.role === 'student') {
       return [
@@ -128,9 +116,7 @@ export default function Navbar() {
       { path: '/profile', label: 'Account' },
     ];
   };
-
   const navLinks = getNavLinks();
-
   return (
     <>
       <nav className="liquid-navbar sticky top-0 z-[100] overflow-visible">
@@ -148,7 +134,6 @@ export default function Navbar() {
                 <SystemAnnouncementBanner />
               </div>
             </div>
-
             <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
               {isCommunityPage && (
                 <button
@@ -190,7 +175,6 @@ export default function Navbar() {
                 </span>
               )}
             </button>
-
               <div className="relative z-[101]">
                 <button
                   ref={profileButtonRef}
@@ -212,7 +196,6 @@ export default function Navbar() {
             </div>
           </div>
         </div>
-
         {showProfileMenu && profileMenuPosition && createPortal(
           <motion.div
             key="profile-menu"
@@ -272,7 +255,6 @@ export default function Navbar() {
           document.body
         )}
       </nav>
-
       <AnimatePresence>
         {showMobileMenu && isCommunityPage && (
           <>
@@ -301,7 +283,6 @@ export default function Navbar() {
                     <X className="w-5 h-5 text-gray-900" />
                   </button>
                 </div>
-
                 <nav className="space-y-2">
                   {navLinks.map((link) => (
                     <Link
@@ -318,7 +299,6 @@ export default function Navbar() {
                     </Link>
                   ))}
                 </nav>
-
                 <div className="mt-6 pt-6 border-t border-white/20">
                   <button
                     onClick={() => {

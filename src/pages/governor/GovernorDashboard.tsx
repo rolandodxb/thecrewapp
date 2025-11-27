@@ -2,17 +2,14 @@ import { Activity, Users, BookOpen, MessageCircle, TrendingUp, AlertCircle, Shie
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db } from '../../lib/auth';
 import { getAllCourses } from '../../services/courseService';
-
 interface DashboardMetrics {
   activeUsers: number;
   activeCourses: number;
   activeChats: number;
   systemHealth: number;
 }
-
 export default function GovernorDashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     activeUsers: 0,
@@ -21,19 +18,15 @@ export default function GovernorDashboard() {
     systemHealth: 100,
   });
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     const loadMetrics = async () => {
       try {
         const usersSnapshot = await getDocs(collection(db, 'users'));
         const activeUsers = usersSnapshot.size;
-
         const courses = await getAllCourses();
         const activeCourses = courses.length;
-
         const chatsSnapshot = await getDocs(collection(db, 'conversations'));
         const activeChats = chatsSnapshot.size;
-
         setMetrics({
           activeUsers,
           activeCourses,
@@ -46,17 +39,14 @@ export default function GovernorDashboard() {
         setLoading(false);
       }
     };
-
     loadMetrics();
   }, []);
-
   const metricCards = [
     { label: 'Active Users', value: loading ? '...' : metrics.activeUsers.toString(), change: '—', icon: Users, color: 'from-blue-500 to-blue-600' },
     { label: 'Active Courses', value: loading ? '...' : metrics.activeCourses.toString(), change: '—', icon: BookOpen, color: 'from-green-500 to-green-600' },
     { label: 'Active Chats', value: loading ? '...' : metrics.activeChats.toString(), change: '—', icon: MessageCircle, color: 'from-purple-500 to-purple-600' },
     { label: 'System Health', value: `${metrics.systemHealth}%`, change: 'Healthy', icon: Activity, color: 'from-emerald-500 to-emerald-600' },
   ];
-
   const modules = [
     { name: 'AI Trainer', status: 'operational', uptime: '99.9%' },
     { name: 'Open Day Simulator', status: 'operational', uptime: '99.7%' },
@@ -65,14 +55,12 @@ export default function GovernorDashboard() {
     { name: 'Recruiter Database', status: 'operational', uptime: '99.9%' },
     { name: 'Authentication', status: 'operational', uptime: '100%' },
   ];
-
   const quickActions = [
     { label: 'Command Console', icon: Terminal, path: '/governor/commands', color: 'bg-gray-700' },
     { label: 'Announcements', icon: AlertCircle, path: '/governor/announcements', color: 'bg-blue-600' },
     { label: 'Backups', icon: Database, path: '/governor/backups', color: 'bg-green-600' },
     { label: 'User Management', icon: Users, path: '/users', color: 'bg-purple-600' },
   ];
-
   return (
     <div className="p-6 space-y-6">
       <motion.div
@@ -90,7 +78,6 @@ export default function GovernorDashboard() {
           <span className="text-sm text-green-400">All systems operational</span>
         </div>
       </motion.div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {metricCards.map((metric, index) => {
           const Icon = metric.icon;
@@ -117,7 +104,6 @@ export default function GovernorDashboard() {
           );
         })}
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -143,7 +129,6 @@ export default function GovernorDashboard() {
             ))}
           </div>
         </motion.div>
-
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -165,7 +150,6 @@ export default function GovernorDashboard() {
               );
             })}
           </div>
-
           <div className="mt-6 pt-6 border-t border-gray-200">
             <h3 className="font-semibold text-gray-900 mb-3">Database Status</h3>
             <div className="space-y-2 text-sm">

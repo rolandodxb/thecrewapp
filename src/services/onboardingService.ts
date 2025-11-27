@@ -1,22 +1,17 @@
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-
+import { db } from '../lib/auth';
 export interface OnboardingStatus {
   hasCompletedOnboarding: boolean;
   onboardingCompletedAt?: string;
   hasSeenWelcomeBanner: boolean;
 }
-
 export async function getOnboardingStatus(userId: string): Promise<boolean> {
   try {
     const userDocRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userDocRef);
-
     if (!userDoc.exists()) {
       console.error('User document not found');
       return false;
     }
-
     const userData = userDoc.data();
     return userData.hasCompletedOnboarding === true;
   } catch (error) {
@@ -24,7 +19,6 @@ export async function getOnboardingStatus(userId: string): Promise<boolean> {
     return false;
   }
 }
-
 export async function completeOnboarding(userId: string): Promise<void> {
   try {
     const userDocRef = doc(db, 'users', userId);
@@ -38,7 +32,6 @@ export async function completeOnboarding(userId: string): Promise<void> {
     throw error;
   }
 }
-
 export async function resetOnboarding(userId: string): Promise<void> {
   try {
     const userDocRef = doc(db, 'users', userId);
@@ -52,17 +45,14 @@ export async function resetOnboarding(userId: string): Promise<void> {
     throw error;
   }
 }
-
 export async function hasSeenWelcomeBanner(userId: string): Promise<boolean> {
   try {
     const userDocRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userDocRef);
-
     if (!userDoc.exists()) {
       console.error('User document not found');
       return false;
     }
-
     const userData = userDoc.data();
     return userData.hasSeenWelcomeBanner === true;
   } catch (error) {
@@ -70,7 +60,6 @@ export async function hasSeenWelcomeBanner(userId: string): Promise<boolean> {
     return false;
   }
 }
-
 export async function markWelcomeBannerSeen(userId: string): Promise<void> {
   try {
     const userDocRef = doc(db, 'users', userId);

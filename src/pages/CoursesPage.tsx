@@ -3,12 +3,11 @@ import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { communityChatService, Conversation } from '../services/communityChatService';
 import { presenceService } from '../services/presenceService';
-import { auth } from '../lib/firebase';
+import { auth, supabase } from '../lib/auth';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useTypingIndicator } from '../hooks/useTypingIndicator';
 import { Search, Mic, Send, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
 export default function CommunityPage() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
@@ -19,14 +18,12 @@ export default function CommunityPage() {
   const [sending, setSending] = useState(false);
   const [showMobileMessages, setShowMobileMessages] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
   const { messages, loading } = useChatMessages(selectedConversation?.id || null);
   const { typingUsers, startTyping, stopTyping } = useTypingIndicator(
     selectedConversation?.id || null,
     currentUser?.uid || '',
     currentUser?.name || ''
   );
-
   useEffect(() => {
     const initCommunityChat = async () => {
       try {
@@ -39,30 +36,24 @@ export default function CommunityPage() {
         console.error('Error initializing community chat:', error);
       }
     };
-
     initCommunityChat();
     presenceService.initializePresence();
-
     const unsubscribeConversations = communityChatService.subscribeToConversations((convs) => {
       setConversations(convs);
       if (!selectedConversation && convs.length > 0) {
         setSelectedConversation(convs[0]);
       }
     });
-
     return () => {
       presenceService.cleanup();
       unsubscribeConversations();
     };
   }, []);
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
   const handleSendMessage = async () => {
     if (!currentUser || !selectedConversation || !messageText.trim()) return;
-
     setSending(true);
     try {
       await communityChatService.sendMessage(
@@ -78,11 +69,9 @@ export default function CommunityPage() {
       setSending(false);
     }
   };
-
   const filteredConversations = conversations.filter(conv =>
     conv?.title?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
   if (!currentUser) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -90,7 +79,6 @@ export default function CommunityPage() {
       </div>
     );
   }
-
   return (
     <div className="h-screen flex bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200 p-4 gap-4 overflow-hidden">
       {/* Left Sidebar - Full screen on mobile when no conversation selected */}
@@ -115,7 +103,6 @@ export default function CommunityPage() {
             back
           </button>
         </div>
-
         {/* Search Input */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -128,7 +115,6 @@ export default function CommunityPage() {
           />
           <Mic className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         </div>
-
         {/* Conversation List Card */}
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
@@ -139,7 +125,6 @@ export default function CommunityPage() {
           <div className="p-4">
             <p className="text-sm text-gray-500 font-medium">conversation list</p>
           </div>
-
           <div className="flex-1 overflow-y-auto px-2">
             <AnimatePresence mode="popLayout">
               {filteredConversations.map((conv, index) => (
@@ -174,7 +159,6 @@ export default function CommunityPage() {
           </div>
         </motion.div>
       </motion.div>
-
       {/* Main Chat Area */}
       <motion.div
         initial={{ x: 50, opacity: 0 }}
@@ -204,7 +188,6 @@ export default function CommunityPage() {
                 <Mic className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               </div>
             </div>
-
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto px-8 py-6">
               {!loading && messages.length === 0 ? (
@@ -299,7 +282,6 @@ export default function CommunityPage() {
                 </div>
               )}
             </div>
-
             {/* Message Input */}
             <div className="p-4 border-t border-gray-100">
               <div className="flex items-center gap-3 max-w-4xl mx-auto">

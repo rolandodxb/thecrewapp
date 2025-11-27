@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Heart, Smile, Flag, Check, CheckCheck } from 'lucide-react';
 import { Message } from '../../services/communityChatService';
-import { auth } from '../../lib/firebase';
-
+import { auth, supabase } from '../../lib/auth';
 interface MessageBubbleProps {
   message: Message;
   onAddReaction: (emoji: string) => void;
@@ -10,9 +9,7 @@ interface MessageBubbleProps {
   onReport: () => void;
   showReadReceipts?: boolean;
 }
-
 const QUICK_REACTIONS = ['👍', '❤️', '😊', '🎉', '🔥', '👏'];
-
 export default function MessageBubble({
   message,
   onAddReaction,
@@ -23,9 +20,7 @@ export default function MessageBubble({
   const [showReactions, setShowReactions] = useState(false);
   const currentUserId = auth.currentUser?.uid;
   const isOwnMessage = message.senderId === currentUserId;
-
   const readByCount = message.readBy ? Object.keys(message.readBy).length : 0;
-
   if (message.deleted) {
     return (
       <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4`}>
@@ -35,14 +30,12 @@ export default function MessageBubble({
       </div>
     );
   }
-
   return (
     <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4 group`}>
       <div className="max-w-md">
         {!isOwnMessage && (
           <p className="text-xs text-gray-500 mb-1 ml-3 font-medium">{message.senderName}</p>
         )}
-
         <div
           className={`relative px-4 py-3 rounded-3xl shadow-xl backdrop-blur-2xl ${
             isOwnMessage
@@ -55,9 +48,7 @@ export default function MessageBubble({
               <p className="text-xs opacity-70">Replying to message</p>
             </div>
           )}
-
           <p className="text-sm break-words">{message.content}</p>
-
           {message.attachmentUrl && (
             <div className="mt-2">
               {message.contentType === 'image' ? (
@@ -91,7 +82,6 @@ export default function MessageBubble({
               )}
             </div>
           )}
-
           {message.reactions && Object.keys(message.reactions).length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {Object.entries(message.reactions).map(([emoji, users]) => (
@@ -112,7 +102,6 @@ export default function MessageBubble({
               ))}
             </div>
           )}
-
           <div className={`flex items-center justify-between mt-2 text-xs ${
             isOwnMessage ? 'text-gray-500' : 'text-gray-400'
           }`}>
@@ -122,7 +111,6 @@ export default function MessageBubble({
                 minute: '2-digit',
               })}
             </span>
-
             {isOwnMessage && showReadReceipts && readByCount > 1 && (
               <div className="flex items-center gap-1">
                 {readByCount > 2 ? (
@@ -134,7 +122,6 @@ export default function MessageBubble({
               </div>
             )}
           </div>
-
           <div className="absolute -right-2 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="flex flex-col gap-1 glass-card border border-gray-200 rounded-lg p-1 shadow-lg">
               <button
@@ -144,7 +131,6 @@ export default function MessageBubble({
               >
                 <Smile className="w-4 h-4 text-gray-600" />
               </button>
-
               <button
                 onClick={onLike}
                 className="p-1.5 hover:glass-bubble rounded transition-colors"
@@ -156,7 +142,6 @@ export default function MessageBubble({
                   }`}
                 />
               </button>
-
               {!isOwnMessage && (
                 <button
                   onClick={onReport}
@@ -168,7 +153,6 @@ export default function MessageBubble({
               )}
             </div>
           </div>
-
           {showReactions && (
             <div className="absolute -top-12 left-0 glass-card border border-gray-200 rounded-lg p-2 flex gap-2 shadow-xl z-10">
               {QUICK_REACTIONS.map((emoji) => (
@@ -186,7 +170,6 @@ export default function MessageBubble({
             </div>
           )}
         </div>
-
         {message.likesCount > 0 && (
           <div className="flex items-center gap-1 mt-1 ml-3 text-xs text-gray-500">
             <Heart className="w-3 h-3 fill-red-500 text-red-500" />

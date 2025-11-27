@@ -1,17 +1,4 @@
-import { db } from '../lib/firebase';
-import {
-  collection,
-  doc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  getDoc,
-  getDocs,
-  query,
-  orderBy,
-  Timestamp
-} from 'firebase/firestore';
-
+import { db } from '../lib/auth';
 export interface MainModule {
   id: string;
   type: 'main';
@@ -35,7 +22,6 @@ export interface MainModule {
   created_at: string;
   updated_at: string;
 }
-
 export interface Submodule {
   id: string;
   type: 'submodule';
@@ -50,7 +36,6 @@ export interface Submodule {
   created_at: string;
   updated_at: string;
 }
-
 export const createMainModule = async (data: {
   title: string;
   description: string;
@@ -75,7 +60,6 @@ export const createMainModule = async (data: {
     const moduleRef = doc(collection(db, 'main_modules'));
     const moduleId = moduleRef.id;
     console.log('createMainModule: Generated module ID:', moduleId);
-
     const mainModule: MainModule = {
       id: moduleId,
       type: 'main',
@@ -86,12 +70,10 @@ export const createMainModule = async (data: {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-
     if (data.course_id) mainModule.course_id = data.course_id;
     if (data.course1_id) mainModule.course1_id = data.course1_id;
     if (data.course2_id) mainModule.course2_id = data.course2_id;
     if (data.submodules && data.submodules.length > 0) mainModule.submodules = data.submodules;
-
     console.log('createMainModule: Module object to save:', mainModule);
     console.log('createMainModule: Saving to collection path: main_modules');
     await setDoc(moduleRef, mainModule);
@@ -103,7 +85,6 @@ export const createMainModule = async (data: {
     throw error;
   }
 };
-
 export const createSubmodule = async (data: {
   parentModuleId: string;
   order: number;
@@ -117,7 +98,6 @@ export const createSubmodule = async (data: {
   try {
     const submoduleRef = doc(collection(db, 'submodules'));
     const submoduleId = submoduleRef.id;
-
     const submodule: Submodule = {
       id: submoduleId,
       type: 'submodule',
@@ -129,11 +109,9 @@ export const createSubmodule = async (data: {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-
     if (data.course_id) submodule.course_id = data.course_id;
     if (data.course1_id) submodule.course1_id = data.course1_id;
     if (data.course2_id) submodule.course2_id = data.course2_id;
-
     await setDoc(submoduleRef, submodule);
     console.log('Submodule created:', submoduleId);
     return submoduleId;
@@ -142,38 +120,32 @@ export const createSubmodule = async (data: {
     throw error;
   }
 };
-
 export const getAllMainModules = async (): Promise<MainModule[]> => {
   try {
     console.log('getAllMainModules: Fetching from collection: main_modules');
     const modulesRef = collection(db, 'main_modules');
     const q = query(modulesRef, orderBy('created_at', 'desc'));
     const snapshot = await getDocs(q);
-
     console.log('getAllMainModules: Found', snapshot.docs.length, 'main modules');
     const modules = snapshot.docs.map(doc => {
       const data = doc.data() as MainModule;
       console.log('getAllMainModules: Module:', doc.id, data);
       return data;
     });
-
     return modules;
   } catch (error) {
     console.error('getAllMainModules: Error fetching main modules:', error);
     return [];
   }
 };
-
 export const getMainModule = async (moduleId: string): Promise<MainModule | null> => {
   try {
     if (!moduleId || typeof moduleId !== 'string') {
       console.error('Invalid moduleId provided to getMainModule:', moduleId);
       return null;
     }
-
     const moduleRef = doc(db, 'main_modules', moduleId);
     const moduleSnap = await getDoc(moduleRef);
-
     if (moduleSnap.exists()) {
       return moduleSnap.data() as MainModule;
     }
@@ -183,33 +155,27 @@ export const getMainModule = async (moduleId: string): Promise<MainModule | null
     return null;
   }
 };
-
 export const getSubmodulesByParent = async (parentModuleId: string): Promise<Submodule[]> => {
   try {
     const submodulesRef = collection(db, 'submodules');
     const snapshot = await getDocs(submodulesRef);
-
     const submodules = snapshot.docs
       .map(doc => doc.data() as Submodule)
       .filter(sub => sub.parentModuleId === parentModuleId)
       .sort((a, b) => a.order - b.order);
-
     return submodules;
   } catch (error) {
     console.error('Error fetching submodules:', error);
     return [];
   }
 };
-
 export const getSubmodule = async (submoduleId: string): Promise<Submodule | null> => {
   try {
     const modulesRef = collection(db, 'main_modules');
     const snapshot = await getDocs(modulesRef);
-
     for (const moduleDoc of snapshot.docs) {
       const moduleData = moduleDoc.data();
       const submodules = moduleData.submodules || [];
-
       const foundSubmodule = submodules.find((sub: any) => sub.id === submoduleId);
       if (foundSubmodule) {
         return {
@@ -221,14 +187,12 @@ export const getSubmodule = async (submoduleId: string): Promise<Submodule | nul
         } as Submodule;
       }
     }
-
     return null;
   } catch (error) {
     console.error('Error fetching submodule:', error);
     return null;
   }
 };
-
 export const updateMainModule = async (
   moduleId: string,
   data: Partial<Omit<MainModule, 'id' | 'type' | 'created_at'>>
@@ -245,7 +209,6 @@ export const updateMainModule = async (
     throw error;
   }
 };
-
 export const updateSubmodule = async (
   submoduleId: string,
   data: Partial<Omit<Submodule, 'id' | 'type' | 'created_at'>>
@@ -262,7 +225,6 @@ export const updateSubmodule = async (
     throw error;
   }
 };
-
 export const deleteMainModule = async (moduleId: string): Promise<void> => {
   try {
     const moduleRef = doc(db, 'main_modules', moduleId);
@@ -273,7 +235,6 @@ export const deleteMainModule = async (moduleId: string): Promise<void> => {
     throw error;
   }
 };
-
 export const deleteSubmodule = async (submoduleId: string): Promise<void> => {
   try {
     const submoduleRef = doc(db, 'submodules', submoduleId);

@@ -3,24 +3,19 @@ import { useEffect } from 'react';
 import { User as UserType } from '../../context/AppContext';
 import { Search, Ban, Volume2, VolumeX, TrendingUp, TrendingDown, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
-
+import { db } from '../../lib/auth';
 export default function UsersControl() {
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
-
   useEffect(() => {
     loadUsers();
   }, []);
-
   const loadUsers = async () => {
     try {
       const usersRef = collection(db, 'users');
       const querySnapshot = await getDocs(usersRef);
-      
       const usersData: UserType[] = querySnapshot.docs.map(doc => {
         const data = doc.data();
         return {
@@ -41,7 +36,6 @@ export default function UsersControl() {
           muted: data.muted || false,
         };
       });
-      
       setUsers(usersData);
     } catch (error) {
       console.error('Error loading users:', error);
@@ -49,7 +43,6 @@ export default function UsersControl() {
       setLoading(false);
     }
   };
-
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -57,83 +50,68 @@ export default function UsersControl() {
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
     return matchesSearch && matchesRole;
   });
-
   const handleBan = async (userId: string) => {
     try {
       const user = users.find(u => u.uid === userId);
       if (!user) return;
-      
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
         banned: !user.banned,
         updatedAt: new Date().toISOString()
       });
-      
       setUsers(users.map(u => u.uid === userId ? { ...u, banned: !u.banned } : u));
     } catch (error) {
       console.error('Error updating user ban status:', error);
       alert('Failed to update user status. Please try again.');
     }
   };
-
   const handleMute = async (userId: string) => {
     try {
       const user = users.find(u => u.uid === userId);
       if (!user) return;
-      
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
         muted: !user.muted,
         updatedAt: new Date().toISOString()
       });
-      
       setUsers(users.map(u => u.uid === userId ? { ...u, muted: !u.muted } : u));
     } catch (error) {
       console.error('Error updating user mute status:', error);
       alert('Failed to update user status. Please try again.');
     }
   };
-
   const handlePromote = async (userId: string) => {
     try {
       const user = users.find(u => u.uid === userId);
       if (!user) return;
-      
       const newRole = user.role === 'student' ? 'mentor' : user.role === 'mentor' ? 'governor' : 'governor';
-      
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
         role: newRole,
         updatedAt: new Date().toISOString()
       });
-      
       setUsers(users.map(u => u.uid === userId ? { ...u, role: newRole } : u));
     } catch (error) {
       console.error('Error promoting user:', error);
       alert('Failed to promote user. Please try again.');
     }
   };
-
   const handleDemote = async (userId: string) => {
     try {
       const user = users.find(u => u.uid === userId);
       if (!user) return;
-      
       const newRole = user.role === 'governor' ? 'mentor' : user.role === 'mentor' ? 'student' : 'student';
-      
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
         role: newRole,
         updatedAt: new Date().toISOString()
       });
-      
       setUsers(users.map(u => u.uid === userId ? { ...u, role: newRole } : u));
     } catch (error) {
       console.error('Error demoting user:', error);
       alert('Failed to demote user. Please try again.');
     }
   };
-
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center min-h-screen">
@@ -144,14 +122,12 @@ export default function UsersControl() {
       </div>
     );
   }
-
   return (
     <div>
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-[#1C1C1C] mb-2">Users Control</h1>
         <p className="text-gray-600">Manage all platform users and permissions</p>
       </div>
-
       <div className="glass-light rounded-2xl shadow-lg p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="relative">
@@ -164,7 +140,6 @@ export default function UsersControl() {
               className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#D71920] focus:ring-2 focus:ring-[#D71920]/20 transition"
             />
           </div>
-
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
@@ -175,7 +150,6 @@ export default function UsersControl() {
             <option value="mentor">Mentors</option>
             <option value="governor">Governors</option>
           </select>
-
           <div className="col-span-2 flex items-center justify-end gap-4 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
@@ -188,7 +162,6 @@ export default function UsersControl() {
           </div>
         </div>
       </div>
-
       <div className="glass-light rounded-2xl shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">

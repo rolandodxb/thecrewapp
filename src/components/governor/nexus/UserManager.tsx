@@ -2,11 +2,9 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Shield, Ban, TrendingDown, CheckCircle, XCircle, Search, Filter, Mail, Key, UserX, UserCheck } from 'lucide-react';
 import { useFirestoreCollection } from '../../../hooks/useFirestoreRealtime';
-import { doc, updateDoc, collection, addDoc } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
+import { supabase } from '../../../lib/auth';
 import { useApp } from '../../../context/AppContext';
 import { auditLogService } from '../../../services/auditLogService';
-
 interface User {
   id: string;
   uid: string;
@@ -22,7 +20,6 @@ interface User {
   lastLogin?: any;
   createdAt?: any;
 }
-
 export default function UserManager() {
   const { currentUser } = useApp();
   const { data: allUsers, loading } = useFirestoreCollection<User>('users');
@@ -32,9 +29,7 @@ export default function UserManager() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [planFilter, setPlanFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-
   const isGovernor = currentUser?.role === 'governor';
-
   const filteredUsers = allUsers.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           user.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -46,7 +41,6 @@ export default function UserManager() {
                           (statusFilter === 'active' && !user.banned && !user.muted);
     return matchesSearch && matchesRole && matchesPlan && matchesStatus;
   });
-
   const toggleSelectUser = (userId: string) => {
     const newSelected = new Set(selectedUsers);
     if (newSelected.has(userId)) {
@@ -56,7 +50,6 @@ export default function UserManager() {
     }
     setSelectedUsers(newSelected);
   };
-
   const toggleSelectAll = () => {
     if (selectedUsers.size === filteredUsers.length) {
       setSelectedUsers(new Set());
@@ -64,19 +57,15 @@ export default function UserManager() {
       setSelectedUsers(new Set(filteredUsers.map(u => u.id)));
     }
   };
-
   const handleBulkAction = async (action: string) => {
     if (selectedUsers.size === 0) return;
     if (!confirm(`${action} ${selectedUsers.size} selected users?`)) return;
-
     setProcessing('bulk');
     try {
       const promises = Array.from(selectedUsers).map(async (userId) => {
         const user = allUsers.find(u => u.id === userId);
         if (!user) return;
-
         const updates: any = { updatedAt: new Date().toISOString() };
-
         switch (action) {
           case 'ban':
             updates.banned = true;
@@ -95,7 +84,6 @@ export default function UserManager() {
             updates.plan = 'free';
             break;
         }
-
         await updateDoc(doc(db, 'users', userId), updates);
         await auditLogService.log(
           currentUser!.uid,
@@ -105,7 +93,6 @@ export default function UserManager() {
           { targetEmail: user.email, action }
         );
       });
-
       await Promise.all(promises);
       setSelectedUsers(new Set());
       alert(`Successfully ${action}ed ${selectedUsers.size} users`);
@@ -116,14 +103,11 @@ export default function UserManager() {
       setProcessing(null);
     }
   };
-
   const handleSingleAction = async (user: User, action: string) => {
     if (!isGovernor) return;
-
     setProcessing(user.id);
     try {
       const updates: any = { updatedAt: new Date().toISOString() };
-
       switch (action) {
         case 'ban':
           updates.banned = true;
@@ -153,7 +137,6 @@ export default function UserManager() {
           updates.verified = true;
           break;
       }
-
       await updateDoc(doc(db, 'users', user.id), updates);
       await auditLogService.log(
         currentUser!.uid,
@@ -169,7 +152,6 @@ export default function UserManager() {
       setProcessing(null);
     }
   };
-
   const getRoleBadge = (role: string) => {
     const colors: Record<string, string> = {
       governor: 'bg-red-100 text-red-800',
@@ -179,7 +161,6 @@ export default function UserManager() {
     };
     return colors[role] || 'bg-gray-100 text-gray-800';
   };
-
   const getPlanBadge = (plan: string) => {
     const colors: Record<string, string> = {
       vip: 'bg-purple-100 text-purple-800',
@@ -189,7 +170,6 @@ export default function UserManager() {
     };
     return colors[plan] || 'bg-gray-100 text-gray-800';
   };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -212,13 +192,11 @@ export default function UserManager() {
           </span>
         )}
       </div>
-
       {!isGovernor && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
           View only mode. User management requires governor access.
         </div>
       )}
-
       <div className="space-y-4 mb-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -230,7 +208,6 @@ export default function UserManager() {
             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
           />
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <select
             value={roleFilter}
@@ -243,7 +220,6 @@ export default function UserManager() {
             <option value="mentor">Mentors</option>
             <option value="governor">Governors</option>
           </select>
-
           <select
             value={planFilter}
             onChange={(e) => setPlanFilter(e.target.value)}
@@ -255,7 +231,6 @@ export default function UserManager() {
             <option value="pro">Pro</option>
             <option value="vip">VIP</option>
           </select>
-
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -267,7 +242,6 @@ export default function UserManager() {
             <option value="muted">Muted</option>
           </select>
         </div>
-
         {isGovernor && selectedUsers.size > 0 && (
           <div className="flex flex-wrap gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
             <span className="text-sm font-semibold text-blue-900">Bulk Actions:</span>
@@ -302,7 +276,6 @@ export default function UserManager() {
           </div>
         )}
       </div>
-
       {loading ? (
         <div className="text-center py-12">
           <div className="w-8 h-8 border-4 border-gray-300 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -321,7 +294,6 @@ export default function UserManager() {
               <span className="text-sm font-semibold text-gray-700">Select All</span>
             </div>
           )}
-
           {filteredUsers.map((user) => (
             <div
               key={user.id}
@@ -368,7 +340,6 @@ export default function UserManager() {
                     </p>
                   )}
                 </div>
-
                 {isGovernor && (
                   <div className="flex flex-wrap gap-1 flex-shrink-0">
                     {user.banned ? (
@@ -411,7 +382,6 @@ export default function UserManager() {
               </div>
             </div>
           ))}
-
           {filteredUsers.length === 0 && (
             <div className="text-center py-12 text-gray-600">
               <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />

@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import { Shield, Key, CheckCircle, XCircle, Copy, Download, Lock, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { totpService } from '../services/totpService';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../lib/firebase';
-
+import { auth, supabase } from '../lib/auth';
 export default function TwoFactorSetup() {
   const { currentUser } = useApp();
   const [enabled, setEnabled] = useState(false);
@@ -19,14 +17,11 @@ export default function TwoFactorSetup() {
   const [success, setSuccess] = useState('');
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
   const [password, setPassword] = useState('');
-
   useEffect(() => {
     checkStatus();
   }, [currentUser]);
-
   const checkStatus = async () => {
     if (!currentUser) return;
-
     try {
       const status = await totpService.check2FAStatus(currentUser.uid);
       setEnabled(status);
@@ -34,17 +29,13 @@ export default function TwoFactorSetup() {
       console.error('Error checking 2FA status:', error);
     }
   };
-
   const handleEnable = async () => {
     if (!currentUser) return;
-
     setLoading(true);
     setError('');
-
     try {
       const { secret: newSecret, uri } = totpService.generateSecret();
       const qrCodeUrl = await totpService.generateQRCode(uri);
-
       setSecret(newSecret);
       setQrCode(qrCodeUrl);
       setShowSetup(true);
@@ -55,28 +46,22 @@ export default function TwoFactorSetup() {
       setLoading(false);
     }
   };
-
   const handleVerifyAndEnable = async () => {
     if (!currentUser || !secret || !verificationCode) return;
-
     setLoading(true);
     setError('');
-
     try {
       const isValid = totpService.verifyToken(secret, verificationCode);
-
       if (!isValid) {
         setError('Invalid verification code. Please try again.');
         setLoading(false);
         return;
       }
-
       const codes = await totpService.enable2FA(
         currentUser.uid,
         currentUser.email,
         secret
       );
-
       setBackupCodes(codes);
       setShowBackupCodes(true);
       setEnabled(true);
@@ -90,20 +75,16 @@ export default function TwoFactorSetup() {
       setLoading(false);
     }
   };
-
   const handleDisable = () => {
     setShowDisableConfirm(true);
     setError('');
     setPassword('');
   };
-
   const handleVerifyPasswordAndDisable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !password) return;
-
     setLoading(true);
     setError('');
-
     try {
       await signInWithEmailAndPassword(auth, currentUser.email, password);
       await totpService.disable2FA(currentUser.uid);
@@ -123,13 +104,11 @@ export default function TwoFactorSetup() {
       setLoading(false);
     }
   };
-
   const copySecret = () => {
     navigator.clipboard.writeText(secret);
     setSuccess('Secret key copied to clipboard!');
     setTimeout(() => setSuccess(''), 2000);
   };
-
   const downloadBackupCodes = () => {
     const text = `Emirates Academy - Two-Factor Authentication Backup Codes\n\nGenerated: ${new Date().toLocaleString()}\n\nBackup Codes:\n${backupCodes.join('\n')}\n\nKeep these codes in a safe place. Each code can only be used once.`;
     const blob = new Blob([text], { type: 'text/plain' });
@@ -142,9 +121,7 @@ export default function TwoFactorSetup() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
-
   if (!currentUser) return null;
-
   return (
     <div className="space-y-6">
       {error && (
@@ -152,13 +129,11 @@ export default function TwoFactorSetup() {
           {error}
         </div>
       )}
-
       {success && (
         <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-green-800 text-sm">
           {success}
         </div>
       )}
-
       {!showSetup && !showBackupCodes && (
         <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
           <div className="flex items-center gap-3">
@@ -185,14 +160,12 @@ export default function TwoFactorSetup() {
           </button>
         </div>
       )}
-
       {showSetup && (
         <div className="space-y-6">
           <div className="p-6 border-2 border-gray-300 rounded-xl bg-white">
             <h3 className="text-lg font-bold text-gray-900 mb-4">
               Set Up Two-Factor Authentication
             </h3>
-
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-gray-700 mb-4">
@@ -205,7 +178,6 @@ export default function TwoFactorSetup() {
                   </div>
                 )}
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Or enter this key manually:
@@ -225,7 +197,6 @@ export default function TwoFactorSetup() {
                   </button>
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Enter verification code from your app:
@@ -243,7 +214,6 @@ export default function TwoFactorSetup() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-[#D71920] focus:ring-2 focus:ring-[#D71920]/20 text-center text-2xl tracking-widest font-mono"
                 />
               </div>
-
               <div className="flex gap-3">
                 <button
                   onClick={handleVerifyAndEnable}
@@ -268,7 +238,6 @@ export default function TwoFactorSetup() {
           </div>
         </div>
       )}
-
       {showBackupCodes && (
         <div className="p-6 border-2 border-green-500 rounded-xl bg-green-50">
           <div className="flex items-center gap-2 mb-4">
@@ -277,13 +246,11 @@ export default function TwoFactorSetup() {
               Save Your Backup Codes
             </h3>
           </div>
-
           <p className="text-sm text-green-800 mb-4">
             Save these backup codes in a safe place. You can use them to access
             your account if you lose your authenticator device. Each code can
             only be used once.
           </p>
-
           <div className="grid grid-cols-2 gap-2 p-4 bg-white rounded-xl border border-green-200 mb-4">
             {backupCodes.map((code, index) => (
               <div
@@ -294,7 +261,6 @@ export default function TwoFactorSetup() {
               </div>
             ))}
           </div>
-
           <div className="flex gap-3">
             <button
               onClick={downloadBackupCodes}
@@ -312,7 +278,6 @@ export default function TwoFactorSetup() {
           </div>
         </div>
       )}
-
       {showDisableConfirm && (
         <div className="p-6 border-2 border-red-300 rounded-xl bg-red-50 space-y-4">
           <div className="flex items-start gap-3 mb-4">
@@ -326,7 +291,6 @@ export default function TwoFactorSetup() {
               </p>
             </div>
           </div>
-
           <form onSubmit={handleVerifyPasswordAndDisable} className="space-y-4">
             <div>
               <label className="block text-sm font-bold text-gray-900 mb-2">
@@ -344,7 +308,6 @@ export default function TwoFactorSetup() {
                 />
               </div>
             </div>
-
             <div className="flex gap-3">
               <button
                 type="button"

@@ -12,9 +12,7 @@ import {
 } from '../services/enrollmentService';
 import { getMainModule, getSubmodule, getAllMainModules } from '../services/mainModuleService';
 import { calculateModuleProgress, getUserEnrollments as getCourseEnrollments } from '../services/courseService';
-import { collection, getDocs, query, where, getDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-
+import { db } from '../lib/auth';
 interface EnrolledItem {
   id: string;
   title: string;
@@ -26,7 +24,6 @@ interface EnrolledItem {
   completed: boolean;
   last_accessed: string;
 }
-
 export default function MyProgressPage() {
   const navigate = useNavigate();
   const { currentUser } = useApp();
@@ -38,32 +35,26 @@ export default function MyProgressPage() {
     inProgress: 0,
     averageProgress: 0
   });
-
   useEffect(() => {
     if (currentUser) {
       loadProgressData();
     }
   }, [currentUser]);
-
   const loadProgressData = async () => {
     console.log('loadProgressData called, currentUser:', currentUser);
     if (!currentUser) {
       console.log('No current user, exiting loadProgressData');
       return;
     }
-
     try {
       setLoading(true);
-
       // Fetch ALL enrollments from course_enrollments collection
       const enrollmentsQuery = query(
         collection(db, 'course_enrollments'),
         where('user_id', '==', currentUser.uid)
       );
-
       const enrollmentsSnap = await getDocs(enrollmentsQuery);
       console.log('Total enrollments found:', enrollmentsSnap.size);
-
       if (enrollmentsSnap.empty) {
         console.log('No enrollments found');
         setEnrolledModules([]);
@@ -76,41 +67,32 @@ export default function MyProgressPage() {
         setLoading(false);
         return;
       }
-
       const enrolledModules: EnrolledItem[] = [];
-
       for (const enrollDoc of enrollmentsSnap.docs) {
         const enrollData = enrollDoc.data();
         console.log('Processing enrollment:', enrollDoc.id, enrollData);
-
         // The enrollment could be for a module_id or course_id
         const moduleId = enrollData.module_id || enrollData.course_id;
-
         if (!moduleId) {
           console.log('No module_id or course_id found in enrollment:', enrollDoc.id);
           continue;
         }
-
         try {
           // Try to fetch as main module first
           let module = await getMainModule(moduleId);
           let moduleType: 'main_module' | 'submodule' | 'course' = 'main_module';
-
           // If not found as main module, try submodule
           if (!module) {
             console.log('Not found as main module, trying submodule:', moduleId);
             module = await getSubmodule(moduleId);
             moduleType = 'submodule';
           }
-
           // If still not found, skip
           if (!module) {
             console.log('Module not found:', moduleId);
             continue;
           }
-
           console.log('Found module:', module.title, 'type:', moduleType);
-
           // Handle timestamps - convert Firestore Timestamp to ISO string
           const convertTimestamp = (timestamp: any): string => {
             if (!timestamp) return new Date().toISOString();
@@ -119,12 +101,10 @@ export default function MyProgressPage() {
             if (timestamp.seconds) return new Date(timestamp.seconds * 1000).toISOString();
             return new Date(timestamp).toISOString();
           };
-
           const enrolledAt = convertTimestamp(enrollData.enrolled_at);
           const lastAccessed = convertTimestamp(enrollData.last_accessed || enrollData.enrolled_at);
           const progressPercentage = enrollData.progress_percentage || 0;
           const completed = enrollData.completed || false;
-
           enrolledModules.push({
             id: moduleId,
             title: module.title,
@@ -136,49 +116,40 @@ export default function MyProgressPage() {
             completed: completed,
             last_accessed: lastAccessed
           });
-
           console.log('Added module to list:', module.title, 'progress:', progressPercentage);
         } catch (error) {
           console.error('Error processing module:', moduleId, error);
         }
       }
-
       console.log('Total enrolled modules processed:', enrolledModules.length);
-
       // Sort by last accessed (most recent first)
       enrolledModules.sort((a, b) =>
         new Date(b.last_accessed).getTime() - new Date(a.last_accessed).getTime()
       );
-
       setEnrolledModules(enrolledModules);
-
       // Calculate stats
       const totalProgress = enrolledModules.reduce((sum, item) => sum + item.progress_percentage, 0);
       const avgProgress = enrolledModules.length > 0 ? Math.round(totalProgress / enrolledModules.length) : 0;
       const completed = enrolledModules.filter(item => item.completed).length;
       const inProgress = enrolledModules.filter(item => !item.completed && item.progress_percentage > 0).length;
-
       setStats({
         totalEnrolled: enrolledModules.length,
         completed,
         inProgress,
         averageProgress: avgProgress
       });
-
       console.log('Stats calculated:', {
         totalEnrolled: enrolledModules.length,
         completed,
         inProgress,
         averageProgress: avgProgress
       });
-
     } catch (error) {
       console.error('Error loading progress data:', error);
     } finally {
       setLoading(false);
     }
   };
-
   const handleModuleClick = (moduleId: string, moduleType: 'main_module' | 'submodule' | 'course') => {
     if (moduleType === 'main_module') {
       navigate(`/main-modules/${moduleId}`);
@@ -188,7 +159,6 @@ export default function MyProgressPage() {
       navigate(`/courses/${moduleId}`);
     }
   };
-
   const handleContinueLearning = () => {
     if (enrolledModules.length > 0) {
       const lastModule = enrolledModules[0];
@@ -197,7 +167,6 @@ export default function MyProgressPage() {
       navigate('/courses');
     }
   };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -208,7 +177,6 @@ export default function MyProgressPage() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen pb-8">
       <div className="max-w-6xl mx-auto p-6">
@@ -216,7 +184,6 @@ export default function MyProgressPage() {
           <h1 className="text-4xl font-bold text-gray-900 mb-2">My Progress</h1>
           <p className="text-gray-600">Track your learning journey and achievements</p>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -237,7 +204,6 @@ export default function MyProgressPage() {
               />
             </div>
           </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -257,7 +223,6 @@ export default function MyProgressPage() {
             </div>
             <p className="text-sm text-gray-500">Active enrollments</p>
           </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -277,7 +242,6 @@ export default function MyProgressPage() {
             </div>
             <p className="text-sm text-gray-500">Modules finished</p>
           </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -298,7 +262,6 @@ export default function MyProgressPage() {
             <p className="text-sm text-gray-500">Currently learning</p>
           </motion.div>
         </div>
-
         {enrolledModules.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -325,12 +288,10 @@ export default function MyProgressPage() {
             </div>
           </motion.div>
         )}
-
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Enrolled Modules</h2>
           <p className="text-gray-600">Click on any module to continue learning</p>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {enrolledModules.map((module, index) => (
             <motion.div
@@ -366,7 +327,6 @@ export default function MyProgressPage() {
                   </div>
                 )}
               </div>
-
               <div className="p-6">
                 <div className="flex items-center gap-2 mb-2">
                   <div className={`p-2 rounded-lg ${
@@ -388,10 +348,8 @@ export default function MyProgressPage() {
                      'Course'}
                   </span>
                 </div>
-
                 <h3 className="text-xl font-bold text-gray-900 mb-2">{module.title}</h3>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-2">{module.description}</p>
-
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-semibold text-gray-700">Progress</span>
@@ -408,7 +366,6 @@ export default function MyProgressPage() {
                     />
                   </div>
                 </div>
-
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <span>Last accessed: {new Date(module.last_accessed).toLocaleDateString()}</span>
                   <ChevronRight className="w-4 h-4" />
@@ -416,7 +373,6 @@ export default function MyProgressPage() {
               </div>
             </motion.div>
           ))}
-
           {enrolledModules.length === 0 && (
             <div className="col-span-2 glass-card rounded-2xl p-12 text-center shadow-lg">
               <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />

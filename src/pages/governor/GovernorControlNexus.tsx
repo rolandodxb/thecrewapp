@@ -2,8 +2,7 @@ import { motion } from 'framer-motion';
 import { Shield, AlertCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import InspectionProtection from '../../components/InspectionProtection';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db } from '../../lib/auth';
 import MetricsCards from '../../components/governor/nexus/MetricsCards';
 import CommandConsole from '../../components/governor/nexus/CommandConsole';
 import BackupControl from '../../components/governor/nexus/BackupControl';
@@ -17,18 +16,15 @@ import AnnouncementManager from './AnnouncementManager';
 import BugReportsManager from '../../components/governor/nexus/BugReportsManager';
 import ModuleManager from '../../components/governor/nexus/ModuleManager';
 import FeatureShutdownControl from './FeatureShutdownControl';
-
 interface Announcement {
   active: boolean;
   message: string;
   type: 'info' | 'warning' | 'error' | 'success';
   timestamp: any;
 }
-
 export default function GovernorControlNexus() {
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     const loadAnnouncement = async () => {
       try {
@@ -45,10 +41,8 @@ export default function GovernorControlNexus() {
         setLoading(false);
       }
     };
-
     loadAnnouncement();
   }, []);
-
   const getBannerColor = (type: string) => {
     switch (type) {
       case 'warning':
@@ -61,7 +55,6 @@ export default function GovernorControlNexus() {
         return 'bg-blue-900 border-blue-700 text-blue-100';
     }
   };
-
   return (
     <InspectionProtection>
       <div className="min-h-screen glass-light">
@@ -77,7 +70,6 @@ export default function GovernorControlNexus() {
           </div>
         </motion.div>
       )}
-
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -94,32 +86,20 @@ export default function GovernorControlNexus() {
             </div>
           </div>
         </motion.div>
-
         <MetricsCards />
-
         <FinancePanel />
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <CommandConsole />
           <BackupControl />
         </div>
-
         <AIAssistantPanel />
-
         <AILogsViewer />
-
         <UserManager />
-
         <CourseManager />
-
         <AnnouncementManager />
-
         <FeatureShutdownControl />
-
         <BugReportsManager />
-
         <ModuleManager />
-
         <SupportChatManager />
       </div>
     </div>

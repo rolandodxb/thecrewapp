@@ -1,15 +1,4 @@
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  orderBy,
-  limit,
-  getDocs,
-  Timestamp
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
-
+import { db } from '../lib/auth';
 export interface AuditLog {
   id: string;
   userId: string;
@@ -21,7 +10,6 @@ export interface AuditLog {
   userAgent?: string;
   createdAt: Timestamp;
 }
-
 export const auditLogService = {
   async log(
     userId: string,
@@ -38,11 +26,9 @@ export const auditLogService = {
       details,
       createdAt: Timestamp.now()
     };
-
     const docRef = await addDoc(collection(db, 'audit_logs'), logData);
     return docRef.id;
   },
-
   async getLogs(
     filters?: {
       userId?: string;
@@ -57,7 +43,6 @@ export const auditLogService = {
       orderBy('createdAt', 'desc'),
       limit(limitCount)
     );
-
     if (filters?.userId) {
       q = query(
         collection(db, 'audit_logs'),
@@ -66,7 +51,6 @@ export const auditLogService = {
         limit(limitCount)
       );
     }
-
     if (filters?.category) {
       q = query(
         collection(db, 'audit_logs'),
@@ -75,14 +59,12 @@ export const auditLogService = {
         limit(limitCount)
       );
     }
-
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as AuditLog));
   },
-
   async exportToCSV(logs: AuditLog[]): Promise<string> {
     const headers = ['Date', 'User Email', 'Action', 'Category', 'Details'];
     const rows = logs.map(log => [
@@ -92,15 +74,12 @@ export const auditLogService = {
       log.category,
       JSON.stringify(log.details)
     ]);
-
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
-
     return csvContent;
   },
-
   downloadCSV(csvContent: string, filename: string = 'audit_logs.csv') {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');

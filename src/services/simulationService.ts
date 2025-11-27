@@ -1,6 +1,4 @@
-import { db } from '../lib/firebase';
-import { collection, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where, getDocs, orderBy, addDoc, Timestamp } from 'firebase/firestore';
-
+import { db } from '../lib/auth';
 export interface SimulationData {
   id?: string;
   user_id: string;
@@ -11,7 +9,6 @@ export interface SimulationData {
   started_at?: string;
   last_updated?: string;
 }
-
 export interface AnswerData {
   id?: string;
   simulation_id: string;
@@ -21,14 +18,12 @@ export interface AnswerData {
   selected_answer: string;
   correct: boolean;
 }
-
 export async function getOrCreateSimulation(userId: string): Promise<SimulationData | null> {
   try {
     console.log('getOrCreateSimulation called for userId:', userId);
     const simulationsRef = collection(db, 'open_day_simulations');
     const q = query(simulationsRef, where('user_id', '==', userId));
     const querySnapshot = await getDocs(q);
-
     if (!querySnapshot.empty) {
       const docData = querySnapshot.docs[0];
       const data = docData.data();
@@ -44,7 +39,6 @@ export async function getOrCreateSimulation(userId: string): Promise<SimulationD
         last_updated: data.last_updated?.toDate?.()?.toISOString() || new Date().toISOString()
       };
     }
-
     console.log('Creating new simulation for user:', userId);
     const newSimDoc = await addDoc(simulationsRef, {
       user_id: userId,
@@ -55,7 +49,6 @@ export async function getOrCreateSimulation(userId: string): Promise<SimulationD
       started_at: Timestamp.now(),
       last_updated: Timestamp.now()
     });
-
     console.log('New simulation created with ID:', newSimDoc.id);
     return {
       id: newSimDoc.id,
@@ -72,7 +65,6 @@ export async function getOrCreateSimulation(userId: string): Promise<SimulationD
     return null;
   }
 }
-
 export async function updateSimulation(
   simulationId: string,
   updates: Partial<SimulationData>
@@ -89,7 +81,6 @@ export async function updateSimulation(
     return false;
   }
 }
-
 export async function saveAnswers(answers: AnswerData[]): Promise<boolean> {
   try {
     const answersRef = collection(db, 'open_day_answers');
@@ -106,13 +97,11 @@ export async function saveAnswers(answers: AnswerData[]): Promise<boolean> {
     return false;
   }
 }
-
 export async function deleteSimulation(userId: string): Promise<boolean> {
   try {
     const simulationsRef = collection(db, 'open_day_simulations');
     const q = query(simulationsRef, where('user_id', '==', userId));
     const querySnapshot = await getDocs(q);
-
     const deletePromises = querySnapshot.docs.map(document =>
       deleteDoc(doc(db, 'open_day_simulations', document.id))
     );
@@ -123,13 +112,11 @@ export async function deleteSimulation(userId: string): Promise<boolean> {
     return false;
   }
 }
-
 export async function getAllSimulations(): Promise<SimulationData[]> {
   try {
     const simulationsRef = collection(db, 'open_day_simulations');
     const q = query(simulationsRef, orderBy('last_updated', 'desc'));
     const querySnapshot = await getDocs(q);
-
     return querySnapshot.docs.map(doc => {
       const data = doc.data();
       return {

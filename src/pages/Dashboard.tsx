@@ -2,13 +2,11 @@ import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, MessageCircle, Users, TrendingUp, Award, GraduationCap, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db } from '../lib/auth';
 import { getUserEnrollments } from '../services/courseService';
 import { getUserPoints } from '../services/rewardsService';
 import EmptyState from '../components/EmptyState';
 import { useState, useEffect } from 'react';
-
 export default function Dashboard() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
@@ -25,13 +23,11 @@ export default function Dashboard() {
     overallProgress: 0,
     certificatesEarned: 0
   });
-
   useEffect(() => {
     if (!currentUser) {
       navigate('/login', { replace: true });
       return;
     }
-
     // Redirect to role-specific dashboards
     if (currentUser.role === 'finance') {
       navigate('/finance-dashboard', { replace: true });
@@ -39,58 +35,47 @@ export default function Dashboard() {
       navigate('/moderator-dashboard', { replace: true });
     }
   }, [currentUser, navigate]);
-
   useEffect(() => {
     if (currentUser) {
       loadDashboardData();
       setIsLoading(false);
     }
   }, [currentUser]);
-
   const loadDashboardData = async () => {
     if (!currentUser) return;
-
     try {
       let totalUsers = 0;
       let totalCourses = 0;
       let activeSessions = 0;
       let supportRequests = 0;
-
       if (currentUser.role === 'governor' || currentUser.role === 'mentor') {
         // Load users count
         const usersRef = collection(db, 'users');
         const usersSnapshot = await getDocs(usersRef);
         totalUsers = usersSnapshot.size;
-
         // Load courses count
         const coursesRef = collection(db, 'courses');
         const coursesSnapshot = await getDocs(coursesRef);
         totalCourses = coursesSnapshot.size;
-
         // Load active simulations (as active sessions)
         const simulationsRef = collection(db, 'open_day_simulations');
         const activeSimsQuery = query(simulationsRef, where('completed', '==', false));
         const activeSimsSnapshot = await getDocs(activeSimsQuery);
         activeSessions = activeSimsSnapshot.size;
       }
-
       // Role-specific data
       let roleSpecificData = {};
-
       if (currentUser.role === 'mentor') {
         const usersRef = collection(db, 'users');
         const coursesRef = collection(db, 'courses');
-
         // Count students (for mentors)
         const studentsQuery = query(usersRef, where('role', '==', 'student'));
         const studentsSnapshot = await getDocs(studentsQuery);
         const activeStudents = studentsSnapshot.size;
-
         // Count courses created by this mentor
         const mentorCoursesQuery = query(coursesRef, where('coach_id', '==', currentUser.uid));
         const mentorCoursesSnapshot = await getDocs(mentorCoursesQuery);
         const coursesCreated = mentorCoursesSnapshot.size;
-
         roleSpecificData = {
           activeStudents,
           coursesCreated,
@@ -99,20 +84,17 @@ export default function Dashboard() {
       } else if (currentUser.role === 'student') {
         const enrollments = await getUserEnrollments(currentUser.uid);
         const completedEnrollments = enrollments.filter(e => e.completed);
-
         let overallProgress = 0;
         if (enrollments.length > 0) {
           const totalProgress = enrollments.reduce((sum, e) => sum + e.progress, 0);
           overallProgress = Math.round(totalProgress / enrollments.length);
         }
-
         roleSpecificData = {
           coursesEnrolled: enrollments.length,
           overallProgress: overallProgress,
           certificatesEarned: completedEnrollments.length
         };
       }
-
       setDashboardData({
         totalUsers,
         totalCourses,
@@ -126,9 +108,7 @@ export default function Dashboard() {
       }
     }
   };
-
   if (!currentUser || isLoading) return null;
-
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -136,12 +116,10 @@ export default function Dashboard() {
       transition: { staggerChildren: 0.1 }
     }
   };
-
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0 }
   };
-
   if (currentUser.role === 'student') {
     return (
       <>
@@ -158,7 +136,6 @@ export default function Dashboard() {
               Continue your journey to cabin crew excellence
             </p>
           </motion.div>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           <motion.div
             variants={itemVariants}
@@ -168,7 +145,6 @@ export default function Dashboard() {
             <p className="text-xs md:text-sm opacity-90 mb-1">Courses Enrolled</p>
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.coursesEnrolled}</p>
           </motion.div>
-
           <motion.div
             variants={itemVariants}
             className="bg-gradient-to-br from-[#3D4A52] to-[#2A3439] rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6 text-white"
@@ -177,7 +153,6 @@ export default function Dashboard() {
             <p className="text-xs md:text-sm opacity-90 mb-1">Overall Progress</p>
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.overallProgress}%</p>
           </motion.div>
-
           <motion.div
             variants={itemVariants}
             className="bg-gradient-to-br from-[#5A6B75] to-[#3D4A52] rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6 text-white"
@@ -187,7 +162,6 @@ export default function Dashboard() {
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.certificatesEarned}</p>
           </motion.div>
         </div>
-
         {dashboardData.coursesEnrolled === 0 && (
           <motion.div variants={itemVariants}>
             <EmptyState
@@ -209,7 +183,6 @@ export default function Dashboard() {
       </>
     );
   }
-
   if (currentUser.role === 'mentor') {
     return (
       <motion.div
@@ -225,7 +198,6 @@ export default function Dashboard() {
             Manage your students and educational content
           </p>
         </motion.div>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           <motion.div
             variants={itemVariants}
@@ -235,7 +207,6 @@ export default function Dashboard() {
             <p className="text-xs md:text-sm opacity-90 mb-1">Active Students</p>
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.activeStudents}</p>
           </motion.div>
-
           <motion.div
             variants={itemVariants}
             className="bg-gradient-to-br from-[#3D4A52] to-[#2A3439] rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6 text-white"
@@ -244,7 +215,6 @@ export default function Dashboard() {
             <p className="text-xs md:text-sm opacity-90 mb-1">Courses Created</p>
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.coursesCreated}</p>
           </motion.div>
-
           <motion.div
             variants={itemVariants}
             className="bg-gradient-to-br from-[#5A6B75] to-[#3D4A52] rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6 text-white"
@@ -254,7 +224,6 @@ export default function Dashboard() {
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.messages}</p>
           </motion.div>
         </div>
-
         <motion.div variants={itemVariants}>
           <EmptyState
             icon={GraduationCap}
@@ -273,7 +242,6 @@ export default function Dashboard() {
       </motion.div>
     );
   }
-
   if (currentUser.role === 'governor') {
     return (
       <motion.div
@@ -289,7 +257,6 @@ export default function Dashboard() {
             System overview and management
           </p>
         </motion.div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
           <motion.div
             variants={itemVariants}
@@ -299,7 +266,6 @@ export default function Dashboard() {
             <p className="text-xs md:text-sm opacity-90 mb-1">Total Users</p>
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.totalUsers}</p>
           </motion.div>
-
           <motion.div
             variants={itemVariants}
             className="bg-gradient-to-br from-[#3D4A52] to-[#2A3439] rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6 text-white"
@@ -308,7 +274,6 @@ export default function Dashboard() {
             <p className="text-xs md:text-sm opacity-90 mb-1">Total Courses</p>
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.totalCourses}</p>
           </motion.div>
-
           <motion.div
             variants={itemVariants}
             className="bg-gradient-to-br from-[#5A6B75] to-[#3D4A52] rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6 text-white"
@@ -317,7 +282,6 @@ export default function Dashboard() {
             <p className="text-xs md:text-sm opacity-90 mb-1">Active Sessions</p>
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.activeSessions}</p>
           </motion.div>
-
           <motion.div
             variants={itemVariants}
             className="bg-gradient-to-br from-[#E6282C] to-[#CC2428] rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6 text-white"
@@ -327,7 +291,6 @@ export default function Dashboard() {
             <p className="text-3xl md:text-4xl font-bold">{dashboardData.supportRequests}</p>
           </motion.div>
         </div>
-
         <motion.div variants={itemVariants}>
           <EmptyState
             icon={BarChart3}
@@ -346,6 +309,5 @@ export default function Dashboard() {
       </motion.div>
     );
   }
-
   return null;
 }

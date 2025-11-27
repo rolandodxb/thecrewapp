@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, MessageCircle, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db } from '../../lib/auth';
 import { useNavigate } from 'react-router-dom';
-
 interface Mention {
   id: string;
   conversationId: string;
@@ -17,21 +15,17 @@ interface Mention {
   createdAt: Timestamp;
   read: boolean;
 }
-
 interface MentionsViewProps {
   userId: string;
   onClose: () => void;
 }
-
 export default function MentionsView({ userId, onClose }: MentionsViewProps) {
   const [mentions, setMentions] = useState<Mention[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-
   useEffect(() => {
     loadMentions();
   }, [userId]);
-
   const loadMentions = async () => {
     try {
       setLoading(true);
@@ -40,13 +34,11 @@ export default function MentionsView({ userId, onClose }: MentionsViewProps) {
         where('mentionedUserId', '==', userId),
         orderBy('createdAt', 'desc')
       );
-
       const snapshot = await getDocs(q);
       const mentionsData: Mention[] = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
       } as Mention));
-
       setMentions(mentionsData);
     } catch (error) {
       console.error('Error loading mentions:', error);
@@ -54,12 +46,10 @@ export default function MentionsView({ userId, onClose }: MentionsViewProps) {
       setLoading(false);
     }
   };
-
   const handleMentionClick = (mention: Mention) => {
     navigate(`/community?chat=${mention.conversationId}`);
     onClose();
   };
-
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -81,7 +71,6 @@ export default function MentionsView({ userId, onClose }: MentionsViewProps) {
               <X className="w-5 h-5 text-gray-600" />
             </button>
           </div>
-
           <div className="flex-1 overflow-y-auto p-4">
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -130,7 +119,6 @@ export default function MentionsView({ userId, onClose }: MentionsViewProps) {
               </div>
             )}
           </div>
-
           <div className="p-4 border-t border-gray-200 bg-gray-50">
             <button
               onClick={onClose}

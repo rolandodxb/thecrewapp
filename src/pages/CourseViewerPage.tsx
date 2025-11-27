@@ -12,9 +12,7 @@ import FeatureAccessGuard from '../components/FeatureAccessGuard';
 import CourseExamInterface from '../components/CourseExamInterface';
 import ExamResultModal from '../components/ExamResultModal';
 import { AnimatePresence } from 'framer-motion';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-
+import { db } from '../lib/auth';
 function CourseViewerPageContent() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
@@ -33,12 +31,10 @@ function CourseViewerPageContent() {
   const [watchProgress, setWatchProgress] = useState(0);
   const [videoStartTime] = useState(Date.now());
   const [courseCompleted, setCourseCompleted] = useState(false);
-
   const searchParams = new URLSearchParams(window.location.search);
   const moduleIdFromUrl = searchParams.get('moduleId');
   const moduleType = searchParams.get('type');
   const [isUnlocked, setIsUnlocked] = useState(true);
-
   useEffect(() => {
     console.log('CourseViewerPage: URL params detected:', {
       moduleIdFromUrl,
@@ -47,30 +43,24 @@ function CourseViewerPageContent() {
       courseId
     });
   }, [moduleIdFromUrl, moduleType, courseId]);
-
   useEffect(() => {
     if (courseId) {
       loadCourse();
     }
   }, [courseId]);
-
   useEffect(() => {
     if (currentUser && courseId && course) {
       markLessonWatched(currentUser.uid, courseId);
     }
   }, [currentUser, courseId, course]);
-
   useEffect(() => {
     if (courseCompleted) {
       return;
     }
-
     const trackProgress = () => {
       const timeWatching = (Date.now() - videoStartTime) / 1000;
       const estimatedProgress = Math.min((timeWatching / 180) * 100, 99);
-
       setWatchProgress(estimatedProgress);
-
       if (estimatedProgress >= 80 && !videoWatched && currentUser && courseId && course) {
         setVideoWatched(true);
         console.log('Video watched 80%, tracking progress...');
@@ -80,34 +70,27 @@ function CourseViewerPageContent() {
         }
       }
     };
-
     const interval = setInterval(trackProgress, 3000);
     return () => clearInterval(interval);
   }, [videoStartTime, videoWatched, currentUser, courseId, course, courseCompleted]);
-
   const loadCourse = async () => {
     if (!courseId) return;
-
     try {
       console.log('CourseViewer: Loading course with ID:', courseId);
       const courseData = await getCourseById(courseId);
       console.log('CourseViewer: Course data received:', courseData);
       setCourse(courseData);
-
       if (!courseData) {
         console.error('CourseViewer: Course not found in database');
         setLoading(false);
         return;
       }
-
       console.log('CourseViewer: Course video_url:', courseData.video_url);
       console.log('CourseViewer: Course pdf_url:', courseData.pdf_url);
-
       if (currentUser) {
         const unlocked = await isCourseUnlocked(currentUser.uid, courseData);
         console.log('CourseViewer: Course unlocked:', unlocked);
         setIsUnlocked(unlocked);
-
         // Auto-enroll user in course when they open it
         const enrolled = await isEnrolledInCourse(currentUser.uid, courseId);
         if (!enrolled) {
@@ -115,9 +98,7 @@ function CourseViewerPageContent() {
           console.log('CourseViewer: Auto-enrolled user in course');
         }
       }
-
       const examData = await getExamByCourseId(courseId);
-
       if (currentUser) {
         const progress = await getCourseProgress(currentUser.uid, courseId);
         if (progress && progress.completed) {
@@ -127,19 +108,16 @@ function CourseViewerPageContent() {
           setCourseCompleted(true);
         }
       }
-
       if (examData) {
         if (!examData.courseId) {
           console.warn('Exam missing courseId, setting it to:', courseId);
           examData.courseId = courseId;
         }
         setExam(examData);
-
         if (currentUser && examData.id) {
           console.log('CourseViewer: Fetching exam result for exam ID:', examData.id);
           const resultRef = doc(db, 'userExams', `${examData.id}_${currentUser.uid}_latest`);
           const resultSnap = await getDoc(resultRef);
-
           if (resultSnap.exists()) {
             const result = resultSnap.data();
             console.log('CourseViewer: Exam result fetched:', result);
@@ -161,26 +139,20 @@ function CourseViewerPageContent() {
       setLoading(false);
     }
   };
-
   const hasAccess = () => {
     if (!course || !currentUser) return false;
-
     const planHierarchy = { free: 0, pro: 1, vip: 2 };
     const userPlanLevel = planHierarchy[currentUser.plan];
     const coursePlanLevel = planHierarchy[course.plan];
-
     return coursePlanLevel <= userPlanLevel;
   };
-
   const getYouTubeEmbedUrl = (url: string): string => {
     if (!url) {
       console.error('No video URL provided');
       return '';
     }
-
     try {
       let videoId = '';
-
       if (url.includes('youtube.com/watch')) {
         const urlParams = new URLSearchParams(new URL(url).search);
         videoId = urlParams.get('v') || '';
@@ -191,9 +163,7 @@ function CourseViewerPageContent() {
       } else if (url.includes('youtube.com/shorts/')) {
         videoId = url.split('youtube.com/shorts/')[1]?.split('?')[0]?.split('/')[0] || '';
       }
-
       videoId = videoId.trim();
-
       if (videoId) {
         return `https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${window.location.origin}`;
       }
@@ -202,7 +172,6 @@ function CourseViewerPageContent() {
     }
     return url;
   };
-
   const handleVideoWatchComplete = async () => {
     console.log('Mark Complete button clicked');
     if (!currentUser) {
@@ -218,7 +187,6 @@ function CourseViewerPageContent() {
       console.error('No course data');
       return;
     }
-
     try {
       console.log('Marking course complete:', {
         userId: currentUser.uid,
@@ -227,20 +195,15 @@ function CourseViewerPageContent() {
         moduleIdFromUrl,
         moduleType
       });
-
       setVideoWatched(true);
       setWatchProgress(100);
-
       const moduleId = moduleIdFromUrl || course.main_module_id || course.submodule_id;
       console.log('Module ID for progress:', moduleId);
-
       if (moduleId) {
         console.log('Tracking course progress...');
         await trackCourseProgress(currentUser.uid, courseId, moduleId, 100, 100);
-
         console.log('Updating course progress...');
         await updateCourseProgress(currentUser.uid, courseId, 100);
-
         console.log('✅ Course marked as complete!');
         alert('✅ Course marked as complete!');
       } else {
@@ -252,9 +215,6 @@ function CourseViewerPageContent() {
       alert('Failed to mark course complete. Check console for details.');
     }
   };
-
-
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -262,7 +222,6 @@ function CourseViewerPageContent() {
       </div>
     );
   }
-
   if (!course) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
@@ -277,7 +236,6 @@ function CourseViewerPageContent() {
       </div>
     );
   }
-
   if (!isUnlocked) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
@@ -297,7 +255,6 @@ function CourseViewerPageContent() {
       </div>
     );
   }
-
   if (!hasAccess()) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
@@ -320,7 +277,6 @@ function CourseViewerPageContent() {
             Back to Courses
           </button>
         </div>
-
         {showUpgradePrompt && (
           <UpgradePrompt
             isOpen={showUpgradePrompt}
@@ -333,7 +289,6 @@ function CourseViewerPageContent() {
       </div>
     );
   }
-
   if (!course.pdf_url && !course.video_url) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
@@ -349,13 +304,10 @@ function CourseViewerPageContent() {
       </div>
     );
   }
-
   const handleExamComplete = async (result: ExamResult) => {
     setExamResult(result);
-
     if (result.passed && currentUser && courseId && course && exam) {
       setHasPassed(true);
-
       const updatedResult = {
         userId: currentUser.uid,
         moduleId: exam.moduleId,
@@ -369,9 +321,7 @@ function CourseViewerPageContent() {
         answers: []
       };
       setLastExamResult(updatedResult);
-
       await updateCourseProgress(currentUser.uid, courseId, 100);
-
       if (course.main_module_id) {
         await trackCourseProgress(currentUser.uid, courseId, course.main_module_id, 100, 100);
       } else if (course.submodule_id) {
@@ -379,19 +329,16 @@ function CourseViewerPageContent() {
       }
     }
   };
-
   const handleStartExam = () => {
     setIsRetake(hasPassed);
     setShowExam(true);
   };
-
   const handleCloseResultModal = () => {
     setShowResultModal(false);
     if (examResult?.passed) {
       navigate(-1);
     }
   };
-
   if (course.video_url) {
     return (
       <div className="min-h-screen">
@@ -403,7 +350,6 @@ function CourseViewerPageContent() {
             <ArrowLeft className="w-5 h-5" />
             Back to Courses
           </button>
-
           {!showExam && (
           <div className="glass-video overflow-hidden mb-6">
             <div className="aspect-video w-full bg-black relative">
@@ -431,7 +377,6 @@ function CourseViewerPageContent() {
             )}
           </div>
           )}
-
           {!showExam && (
           <div className="glass-card p-6 mb-6">
             <h1 className="text-3xl font-bold text-[#1C1C1C] mb-2">{course.title}</h1>
@@ -514,7 +459,6 @@ function CourseViewerPageContent() {
             )}
           </div>
           )}
-
           {!showExam && exam && (
             <>
               {hasPassed && lastExamResult ? (
@@ -529,7 +473,6 @@ function CourseViewerPageContent() {
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">Course Completed!</h1>
                     <p className="text-lg text-gray-600">You have successfully passed this exam.</p>
                   </div>
-
                   <div className="grid md:grid-cols-3 gap-4 mb-6">
                     <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-6 text-center">
                       <div className="text-sm font-semibold text-blue-700 mb-2">Your Score</div>
@@ -544,7 +487,6 @@ function CourseViewerPageContent() {
                       <div className="text-2xl font-bold text-green-600">✓ Passed</div>
                     </div>
                   </div>
-
                   <button
                     onClick={handleStartExam}
                     className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-bold transition"
@@ -574,7 +516,6 @@ function CourseViewerPageContent() {
               ) : null}
             </>
           )}
-
           {showExam && exam && currentUser && (
             <div className="mt-8">
               <CourseExamInterface
@@ -585,12 +526,10 @@ function CourseViewerPageContent() {
               />
             </div>
           )}
-
         </div>
       </div>
     );
   }
-
   return (
     <PDFViewer
       pdfUrl={course.pdf_url!}
@@ -599,7 +538,6 @@ function CourseViewerPageContent() {
     />
   );
 }
-
 export default function CourseViewerPage() {
   return (
     <FeatureAccessGuard featureKey="videos">

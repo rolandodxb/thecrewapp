@@ -1,16 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { DocumentSnapshot } from 'firebase/firestore';
 import { communityChatService, Message } from '../services/communityChatService';
-
 const PAGE_SIZE = 30;
-
 export function useChatMessages(conversationId: string | null) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
-
   useEffect(() => {
     if (!conversationId) {
       setMessages([]);
@@ -18,16 +14,13 @@ export function useChatMessages(conversationId: string | null) {
       setLastDoc(null);
       return;
     }
-
     setMessages([]);
     setHasMore(true);
     setLastDoc(null);
     setLoading(true);
-
     if (unsubscribeRef.current) {
       unsubscribeRef.current();
     }
-
     unsubscribeRef.current = communityChatService.subscribeToMessages(
       conversationId,
       (newMessages) => {
@@ -44,7 +37,6 @@ export function useChatMessages(conversationId: string | null) {
       },
       PAGE_SIZE
     );
-
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
@@ -52,10 +44,8 @@ export function useChatMessages(conversationId: string | null) {
       }
     };
   }, [conversationId]);
-
   const loadMoreMessages = useCallback(async () => {
     if (!conversationId || loading || !hasMore) return;
-
     setLoading(true);
     try {
       const { messages: olderMessages, lastDoc: newLastDoc } = await communityChatService.getMessages(
@@ -63,11 +53,9 @@ export function useChatMessages(conversationId: string | null) {
         PAGE_SIZE,
         lastDoc || undefined
       );
-
       if (olderMessages.length < PAGE_SIZE) {
         setHasMore(false);
       }
-
       setMessages((prev) => {
         const messageMap = new Map<string, Message>();
         [...olderMessages, ...prev].forEach(msg => {
@@ -88,7 +76,6 @@ export function useChatMessages(conversationId: string | null) {
       setLoading(false);
     }
   }, [conversationId, loading, hasMore, lastDoc]);
-
   return {
     messages,
     loading,

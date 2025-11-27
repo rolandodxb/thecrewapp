@@ -1,27 +1,7 @@
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-  getDocs,
-  getDoc,
-  onSnapshot,
-  increment,
-  Timestamp,
-  QueryDocumentSnapshot,
-  DocumentData
-} from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+import { db, auth, supabase } from '../lib/auth';
 import { notifyPostComment, notifyPostReaction, notifyCommentReply } from './comprehensiveNotificationService';
 import { aiModerationService } from './aiModerationService';
 import { reputationService } from './reputationService';
-
 export interface CommunityPost {
   id: string;
   userId: string;
@@ -50,7 +30,6 @@ export interface CommunityPost {
   postType?: 'text' | 'product';
   targetAudience?: 'all' | 'free' | 'pro' | 'vip' | 'pro-vip';
 }
-
 export interface CommunityComment {
   id: string;
   postId: string;
@@ -70,7 +49,6 @@ export interface CommunityComment {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
-
 export interface CommunityReaction {
   id: string;
   postId: string;
@@ -78,9 +56,7 @@ export interface CommunityReaction {
   reactionType: 'fire' | 'heart' | 'thumbsUp' | 'laugh' | 'wow';
   createdAt: Timestamp;
 }
-
 export const POSTS_PER_PAGE = 10;
-
 export const communityFeedService = {
   async convertImageToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -92,7 +68,6 @@ export const communityFeedService = {
       reader.readAsDataURL(file);
     });
   },
-
   async createPost(
     userId: string,
     userName: string,
@@ -110,18 +85,15 @@ export const communityFeedService = {
     if (!postingCheck.allowed) {
       throw new Error(postingCheck.reason || 'Posting not allowed');
     }
-
     const moderationResult = await aiModerationService.moderateContent(
       userId,
       userName,
       content,
       'post'
     );
-
     if (!moderationResult.allowed) {
       throw new Error(moderationResult.reason);
     }
-
     if (moderationResult.action === 'warn') {
       console.warn('⚠️ Content warning:', moderationResult.reason);
       window.dispatchEvent(new CustomEvent('showModerationWarning', {
@@ -129,10 +101,8 @@ export const communityFeedService = {
       }));
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-
     let imageUrl = '';
     let imageUrls: string[] = [];
-
     if (imageFile) {
       if (Array.isArray(imageFile)) {
         imageUrls = await Promise.all(
@@ -146,7 +116,6 @@ export const communityFeedService = {
         imageUrls = [imageUrl];
       }
     }
-
     const postData = {
       userId,
       userName,
@@ -173,9 +142,7 @@ export const communityFeedService = {
       postType: productLink ? 'product' : 'text',
       targetAudience: targetAudience || 'all'
     };
-
     const docRef = await addDoc(collection(db, 'community_posts'), postData);
-
     // Create notification for new post
     await this.createNotification(
       'post',
@@ -185,10 +152,8 @@ export const communityFeedService = {
       '',
       ''
     );
-
     return docRef.id;
   },
-
   async updatePost(postId: string, content: string): Promise<void> {
     const postRef = doc(db, 'community_posts', postId);
     await updateDoc(postRef, {
@@ -196,10 +161,8 @@ export const communityFeedService = {
       updatedAt: Timestamp.now()
     });
   },
-
   async deletePost(postId: string): Promise<void> {
     const postRef = doc(db, 'community_posts', postId);
-
     const commentsQuery = query(
       collection(db, 'community_comments'),
       where('postId', '==', postId)
@@ -207,7 +170,6 @@ export const communityFeedService = {
     const commentsSnapshot = await getDocs(commentsQuery);
     const deletePromises = commentsSnapshot.docs.map(doc => deleteDoc(doc.ref));
     await Promise.all(deletePromises);
-
     const reactionsQuery = query(
       collection(db, 'community_reactions'),
       where('postId', '==', postId)
@@ -215,10 +177,8 @@ export const communityFeedService = {
     const reactionsSnapshot = await getDocs(reactionsQuery);
     const reactionDeletePromises = reactionsSnapshot.docs.map(doc => deleteDoc(doc.ref));
     await Promise.all(reactionDeletePromises);
-
     await deleteDoc(postRef);
   },
-
   async getPosts(
     channel?: string,
     lastDoc?: QueryDocumentSnapshot<DocumentData>,
@@ -233,7 +193,6 @@ export const communityFeedService = {
       orderBy('createdAt', 'desc'),
       limit(POSTS_PER_PAGE)
     );
-
     if (channel) {
       q = query(
         collection(db, 'community_posts'),
@@ -242,7 +201,6 @@ export const communityFeedService = {
         limit(POSTS_PER_PAGE)
       );
     }
-
     if (filters?.userId) {
       q = query(
         collection(db, 'community_posts'),
@@ -251,27 +209,22 @@ export const communityFeedService = {
         limit(POSTS_PER_PAGE)
       );
     }
-
     if (lastDoc) {
       q = query(q, startAfter(lastDoc));
     }
-
     const snapshot = await getDocs(q);
     let posts = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as CommunityPost));
-
     if (filters?.imagesOnly) {
       posts = posts.filter(post => post.imageUrl);
     }
-
     return {
       posts,
       lastDoc: snapshot.docs[snapshot.docs.length - 1] || null
     };
   },
-
   async getPostById(postId: string): Promise<CommunityPost | null> {
     const postRef = doc(db, 'community_posts', postId);
     const postSnap = await getDoc(postRef);
@@ -280,7 +233,6 @@ export const communityFeedService = {
     }
     return null;
   },
-
   subscribeToPost(postId: string, callback: (post: CommunityPost | null) => void) {
     const postRef = doc(db, 'community_posts', postId);
     return onSnapshot(postRef, (doc) => {
@@ -291,7 +243,6 @@ export const communityFeedService = {
       }
     });
   },
-
   async addComment(
     postId: string,
     userId: string,
@@ -309,18 +260,15 @@ export const communityFeedService = {
     if (!userId || !userName || !content.trim()) {
       throw new Error('Missing required fields for comment creation');
     }
-
     const moderationResult = await aiModerationService.moderateContent(
       userId,
       userName,
       content,
       'comment'
     );
-
     if (!moderationResult.allowed) {
       throw new Error(moderationResult.reason);
     }
-
     if (moderationResult.action === 'warn') {
       console.warn('⚠️ Content warning:', moderationResult.reason);
       window.dispatchEvent(new CustomEvent('showModerationWarning', {
@@ -328,7 +276,6 @@ export const communityFeedService = {
       }));
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-
     const commentData = {
       postId,
       userId,
@@ -347,17 +294,13 @@ export const communityFeedService = {
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
     };
-
     const docRef = await addDoc(collection(db, 'community_comments'), commentData);
-
     // Sync comment count from actual collection
     await this.syncCommentsCount(postId);
-
     // Get post owner info for notification
     const postDoc = await getDoc(doc(db, 'community_posts', postId));
     if (postDoc.exists()) {
       const postData = postDoc.data();
-
       // Don't notify if commenting on own post
       if (postData.userId !== userId) {
         // Send comprehensive notification to post author
@@ -369,7 +312,6 @@ export const communityFeedService = {
           postId
         );
       }
-
       // If this is a reply, notify the original commenter
       if (options?.replyTo && options.replyToName) {
         const originalCommentDoc = await getDoc(doc(db, 'community_comments', options.replyTo));
@@ -385,7 +327,6 @@ export const communityFeedService = {
           }
         }
       }
-
       // Old notification system (keep for backward compatibility)
       await this.createNotification(
         'comment',
@@ -396,38 +337,31 @@ export const communityFeedService = {
         postData.userName
       );
     }
-
     return docRef.id;
   },
-
   async deleteComment(commentId: string, postId: string): Promise<void> {
     await deleteDoc(doc(db, 'community_comments', commentId));
-
     // Sync comment count from actual collection
     await this.syncCommentsCount(postId);
   },
-
   async getComments(postId: string): Promise<CommunityComment[]> {
     const q = query(
       collection(db, 'community_comments'),
       where('postId', '==', postId),
       orderBy('createdAt', 'asc')
     );
-
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as CommunityComment));
   },
-
   subscribeToComments(postId: string, callback: (comments: CommunityComment[]) => void) {
     const q = query(
       collection(db, 'community_comments'),
       where('postId', '==', postId),
       orderBy('createdAt', 'asc')
     );
-
     return onSnapshot(
       q,
       (snapshot) => {
@@ -445,7 +379,6 @@ export const communityFeedService = {
       }
     );
   },
-
   async toggleReaction(
     postId: string,
     userId: string,
@@ -456,31 +389,24 @@ export const communityFeedService = {
       where('postId', '==', postId),
       where('userId', '==', userId)
     );
-
     const snapshot = await getDocs(reactionsQuery);
     const postRef = doc(db, 'community_posts', postId);
-
     // Get post owner info
     const postDoc = await getDoc(postRef);
     const postData = postDoc.data();
-
     // Get current user info
     const userDoc = await getDoc(doc(db, 'users', userId));
     const userName = userDoc.exists() ? (userDoc.data().name || userDoc.data().displayName || 'Someone') : 'Someone';
-
     let shouldCreateNotification = false;
-
     if (!snapshot.empty) {
       const existingReaction = snapshot.docs[0];
       const existingType = existingReaction.data().reactionType as 'fire' | 'heart' | 'thumbsUp' | 'laugh' | 'wow';
-
       // If clicking the same reaction, remove it
       if (existingType === reactionType) {
         await deleteDoc(existingReaction.ref);
       } else {
         // Switching to a different reaction
         await deleteDoc(existingReaction.ref);
-
         // Add new reaction
         const newReactionData = {
           postId,
@@ -502,10 +428,8 @@ export const communityFeedService = {
       await addDoc(collection(db, 'community_reactions'), reactionData);
       shouldCreateNotification = true;
     }
-
     // Sync all reaction counts from actual collection
     await this.syncReactionCounts(postId);
-
     // Create notification for new reaction (not for removal or switching from same user)
     if (shouldCreateNotification && postData) {
       // Don't notify if reacting to own post
@@ -519,7 +443,6 @@ export const communityFeedService = {
           postId
         );
       }
-
       // Old notification system (keep for backward compatibility)
       await this.createNotification(
         'reaction',
@@ -532,21 +455,18 @@ export const communityFeedService = {
       );
     }
   },
-
   async getUserReaction(postId: string, userId: string): Promise<string | null> {
     const reactionsQuery = query(
       collection(db, 'community_reactions'),
       where('postId', '==', postId),
       where('userId', '==', userId)
     );
-
     const snapshot = await getDocs(reactionsQuery);
     if (!snapshot.empty) {
       return snapshot.docs[0].data().reactionType;
     }
     return null;
   },
-
   async flagPost(postId: string, reason: string): Promise<void> {
     const postRef = doc(db, 'community_posts', postId);
     await updateDoc(postRef, {
@@ -554,7 +474,6 @@ export const communityFeedService = {
       flaggedReason: reason,
       updatedAt: Timestamp.now()
     });
-
     await addDoc(collection(db, 'community_flags'), {
       postId,
       reason,
@@ -562,7 +481,6 @@ export const communityFeedService = {
       resolved: false
     });
   },
-
   async unflagPost(postId: string): Promise<void> {
     const postRef = doc(db, 'community_posts', postId);
     await updateDoc(postRef, {
@@ -570,7 +488,6 @@ export const communityFeedService = {
       flaggedReason: null,
       updatedAt: Timestamp.now()
     });
-
     const flagsQuery = query(
       collection(db, 'community_flags'),
       where('postId', '==', postId),
@@ -582,21 +499,18 @@ export const communityFeedService = {
     );
     await Promise.all(deletePromises);
   },
-
   async getFlaggedPosts(): Promise<CommunityPost[]> {
     const q = query(
       collection(db, 'community_posts'),
       where('flagged', '==', true),
       orderBy('updatedAt', 'desc')
     );
-
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as CommunityPost));
   },
-
   // Sync reaction counts from community_reactions collection
   async syncReactionCounts(postId: string): Promise<void> {
     try {
@@ -604,9 +518,7 @@ export const communityFeedService = {
         collection(db, 'community_reactions'),
         where('postId', '==', postId)
       );
-
       const snapshot = await getDocs(reactionsQuery);
-
       const counts = {
         fire: 0,
         heart: 0,
@@ -614,14 +526,12 @@ export const communityFeedService = {
         laugh: 0,
         wow: 0
       };
-
       snapshot.docs.forEach(doc => {
         const reactionType = doc.data().reactionType;
         if (counts.hasOwnProperty(reactionType)) {
           counts[reactionType as keyof typeof counts]++;
         }
       });
-
       const postRef = doc(db, 'community_posts', postId);
       await updateDoc(postRef, {
         reactionsCount: counts
@@ -631,7 +541,6 @@ export const communityFeedService = {
       console.debug('Sync reaction counts (expected for non-owners):', error);
     }
   },
-
   // Sync comment count from community_comments collection
   async syncCommentsCount(postId: string): Promise<void> {
     try {
@@ -639,10 +548,8 @@ export const communityFeedService = {
         collection(db, 'community_comments'),
         where('postId', '==', postId)
       );
-
       const snapshot = await getDocs(commentsQuery);
       const count = snapshot.size;
-
       const postRef = doc(db, 'community_posts', postId);
       await updateDoc(postRef, {
         commentsCount: count
@@ -652,16 +559,13 @@ export const communityFeedService = {
       console.debug('Sync comments count (expected for non-owners):', error);
     }
   },
-
   // Track post view
   async trackPostView(postId: string, userId: string): Promise<void> {
     const postRef = doc(db, 'community_posts', postId);
     const postDoc = await getDoc(postRef);
-
     if (postDoc.exists()) {
       const postData = postDoc.data();
       const viewedBy = postData.viewedBy || [];
-
       // Only add if user hasn't viewed before
       if (!viewedBy.includes(userId)) {
         await updateDoc(postRef, {
@@ -671,7 +575,6 @@ export const communityFeedService = {
       }
     }
   },
-
   // Create notification - uses Supabase unified notification service
   async createNotification(
     type: 'post' | 'comment' | 'reaction',
@@ -684,15 +587,12 @@ export const communityFeedService = {
   ): Promise<void> {
     // Don't notify yourself
     if (actorId === targetUserId) return;
-
     try {
       // Import dynamically to avoid circular dependencies
       const { createNotification } = await import('./unifiedNotificationService');
-
       let title = '';
       let message = '';
       let notifType: any = 'community_post';
-
       switch (type) {
         case 'post':
           title = 'New Post';
@@ -718,7 +618,6 @@ export const communityFeedService = {
           notifType = 'community_reaction';
           break;
       }
-
       await createNotification({
         user_id: targetUserId,
         type: notifType,
@@ -737,7 +636,6 @@ export const communityFeedService = {
       console.error('Error creating notification:', error);
     }
   },
-
   async toggleCommentReaction(
     commentId: string,
     userId: string,
@@ -745,17 +643,13 @@ export const communityFeedService = {
   ): Promise<void> {
     const commentRef = doc(db, 'community_comments', commentId);
     const commentDoc = await getDoc(commentRef);
-
     if (!commentDoc.exists()) {
       throw new Error('Comment not found');
     }
-
     const commentData = commentDoc.data();
     const reactions = commentData.reactions || { heart: 0, thumbsUp: 0, laugh: 0 };
     const userReactions = commentData.userReactions || {};
-
     const hasReacted = userReactions[userId] === reactionType;
-
     if (hasReacted) {
       reactions[reactionType] = Math.max(0, reactions[reactionType] - 1);
       delete userReactions[userId];
@@ -767,7 +661,6 @@ export const communityFeedService = {
       reactions[reactionType] = (reactions[reactionType] || 0) + 1;
       userReactions[userId] = reactionType;
     }
-
     await updateDoc(commentRef, {
       reactions,
       userReactions,

@@ -6,9 +6,7 @@ import InspectionProtection from '../components/InspectionProtection';
 import { useApp } from '../context/AppContext';
 import { getSellerOrders, Order } from '../services/orderService';
 import { formatPrice } from '../services/stripeService';
-import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-
+import { db } from '../lib/auth';
 interface Transaction {
   id: string;
   orderId: string;
@@ -29,7 +27,6 @@ interface Transaction {
   };
   phone?: string;
 }
-
 export default function SellerBillingDashboard() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
@@ -39,31 +36,25 @@ export default function SellerBillingDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-
   const [stats, setStats] = useState({
     totalEarnings: 0,
     pendingPayments: 0,
     processedRefunds: 0,
     totalCustomers: 0,
   });
-
   useEffect(() => {
     if (currentUser) {
       loadBillingData();
     }
   }, [currentUser]);
-
   useEffect(() => {
     filterTransactions();
   }, [transactions, searchTerm, statusFilter]);
-
   const loadBillingData = async () => {
     if (!currentUser) return;
-
     setLoading(true);
     try {
       const orders = await getSellerOrders(currentUser.uid);
-
       const transactionsList: Transaction[] = orders.map(order => ({
         id: order.id,
         orderId: order.id,
@@ -78,23 +69,17 @@ export default function SellerBillingDashboard() {
         address: order.shipping_address,
         phone: order.buyer_phone,
       }));
-
       setTransactions(transactionsList);
-
       const totalEarnings = transactionsList
         .filter(t => t.status === 'completed')
         .reduce((sum, t) => sum + t.amount, 0);
-
       const pendingPayments = transactionsList
         .filter(t => t.status === 'pending')
         .reduce((sum, t) => sum + t.amount, 0);
-
       const processedRefunds = transactionsList
         .filter(t => t.status === 'refunded')
         .reduce((sum, t) => sum + t.amount, 0);
-
       const uniqueCustomers = new Set(transactionsList.map(t => t.buyerEmail)).size;
-
       setStats({
         totalEarnings,
         pendingPayments,
@@ -107,14 +92,11 @@ export default function SellerBillingDashboard() {
       setLoading(false);
     }
   };
-
   const filterTransactions = () => {
     let filtered = transactions;
-
     if (statusFilter !== 'all') {
       filtered = filtered.filter(t => t.status === statusFilter);
     }
-
     if (searchTerm) {
       filtered = filtered.filter(t =>
         t.buyerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -123,16 +105,12 @@ export default function SellerBillingDashboard() {
         t.orderId.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-
     setFilteredTransactions(filtered);
   };
-
   const handleRefund = async (transactionId: string) => {
     const reason = prompt('Please enter the reason for refund:');
     if (!reason) return;
-
     if (!confirm('Are you sure you want to process this refund?')) return;
-
     try {
       const orderRef = doc(db, 'orders', transactionId);
       await updateDoc(orderRef, {
@@ -140,7 +118,6 @@ export default function SellerBillingDashboard() {
         refund_reason: reason,
         refunded_at: Timestamp.now(),
       });
-
       alert('Refund processed successfully');
       await loadBillingData();
     } catch (error) {
@@ -148,7 +125,6 @@ export default function SellerBillingDashboard() {
       alert('Failed to process refund');
     }
   };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
@@ -163,7 +139,6 @@ export default function SellerBillingDashboard() {
         return 'bg-blue-100 text-blue-800';
     }
   };
-
   const exportToCSV = () => {
     const headers = ['Order ID', 'Date', 'Customer', 'Product', 'Amount', 'Status', 'Payment Method'];
     const rows = filteredTransactions.map(t => [
@@ -175,7 +150,6 @@ export default function SellerBillingDashboard() {
       t.status,
       t.paymentMethod,
     ]);
-
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -184,7 +158,6 @@ export default function SellerBillingDashboard() {
     a.download = `transactions_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
-
   if (!currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -192,7 +165,6 @@ export default function SellerBillingDashboard() {
       </div>
     );
   }
-
   // Restrict access to mentors and governors only
   if (currentUser.role === 'student') {
     return (
@@ -219,7 +191,6 @@ export default function SellerBillingDashboard() {
       </div>
     );
   }
-
   return (
     <InspectionProtection>
       <div className="min-h-screen py-8">
@@ -232,7 +203,6 @@ export default function SellerBillingDashboard() {
           </h1>
           <p className="text-gray-200 mt-1">Track your earnings and manage payments</p>
         </div>
-
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <motion.div
@@ -246,7 +216,6 @@ export default function SellerBillingDashboard() {
             </div>
             <div className="text-3xl font-bold">{formatPrice(stats.totalEarnings, 'USD')}</div>
           </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -259,7 +228,6 @@ export default function SellerBillingDashboard() {
             </div>
             <div className="text-3xl font-bold">{formatPrice(stats.pendingPayments, 'USD')}</div>
           </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -272,7 +240,6 @@ export default function SellerBillingDashboard() {
             </div>
             <div className="text-3xl font-bold">{formatPrice(stats.processedRefunds, 'USD')}</div>
           </motion.div>
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -286,7 +253,6 @@ export default function SellerBillingDashboard() {
             <div className="text-3xl font-bold">{stats.totalCustomers}</div>
           </motion.div>
         </div>
-
         {/* Filters and Search */}
         <div className="bg-white/20 backdrop-blur-xl rounded-xl border border-white/30 shadow-2xl p-6 mb-6">
           <div className="flex flex-col md:flex-row gap-4">
@@ -300,7 +266,6 @@ export default function SellerBillingDashboard() {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/20 backdrop-blur-xl"
               />
             </div>
-
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -312,7 +277,6 @@ export default function SellerBillingDashboard() {
               <option value="refunded">Refunded</option>
               <option value="failed">Failed</option>
             </select>
-
             <button
               onClick={exportToCSV}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-gray-900 rounded-lg font-medium transition-all flex items-center gap-2"
@@ -322,13 +286,11 @@ export default function SellerBillingDashboard() {
             </button>
           </div>
         </div>
-
         {/* Transactions Table */}
         <div className="bg-white/20 backdrop-blur-xl rounded-xl border border-white/30 shadow-2xl overflow-hidden">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-xl font-bold text-gray-900">Transaction History</h2>
           </div>
-
           {loading ? (
             <div className="p-12 text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -412,7 +374,6 @@ export default function SellerBillingDashboard() {
             </div>
           )}
         </div>
-
         {/* Transaction Details Modal */}
         {selectedTransaction && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -422,30 +383,25 @@ export default function SellerBillingDashboard() {
               className="bg-white/10 backdrop-blur-md rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-white/30"
             >
               <h3 className="text-xl font-bold text-gray-900 mb-4">Transaction Details</h3>
-
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-gray-600">Order ID</label>
                   <p className="text-gray-900">{selectedTransaction.orderId}</p>
                 </div>
-
                 <div>
                   <label className="text-sm font-medium text-gray-600">Customer Name</label>
                   <p className="text-gray-900">{selectedTransaction.buyerName}</p>
                 </div>
-
                 <div>
                   <label className="text-sm font-medium text-gray-600">Email</label>
                   <p className="text-gray-900">{selectedTransaction.buyerEmail}</p>
                 </div>
-
                 {selectedTransaction.phone && (
                   <div>
                     <label className="text-sm font-medium text-gray-600">Phone</label>
                     <p className="text-gray-900">{selectedTransaction.phone}</p>
                   </div>
                 )}
-
                 {selectedTransaction.address && (
                   <div>
                     <label className="text-sm font-medium text-gray-600 flex items-center gap-2 mb-2">
@@ -462,37 +418,31 @@ export default function SellerBillingDashboard() {
                     </div>
                   </div>
                 )}
-
                 <div>
                   <label className="text-sm font-medium text-gray-600">Product</label>
                   <p className="text-gray-900">{selectedTransaction.productTitle}</p>
                 </div>
-
                 <div>
                   <label className="text-sm font-medium text-gray-600">Amount</label>
                   <p className="text-2xl font-bold text-gray-900">
                     {formatPrice(selectedTransaction.amount, selectedTransaction.currency)}
                   </p>
                 </div>
-
                 <div>
                   <label className="text-sm font-medium text-gray-600">Payment Method</label>
                   <p className="text-gray-900">{selectedTransaction.paymentMethod}</p>
                 </div>
-
                 <div>
                   <label className="text-sm font-medium text-gray-600">Status</label>
                   <span className={`inline-block px-3 py-1 text-sm rounded-full ${getStatusColor(selectedTransaction.status)}`}>
                     {selectedTransaction.status}
                   </span>
                 </div>
-
                 <div>
                   <label className="text-sm font-medium text-gray-600">Date</label>
                   <p className="text-gray-900">{selectedTransaction.createdAt.toLocaleString()}</p>
                 </div>
               </div>
-
               <div className="mt-6 flex gap-3">
                 <button
                   onClick={() => setSelectedTransaction(null)}

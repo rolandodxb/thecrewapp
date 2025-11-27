@@ -1,19 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { communityFeedService, CommunityPost } from '../services/communityFeedService';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db } from '../lib/auth';
 import { Award, BookOpen, Trophy, Grid3x3, Lock, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-
 interface UserStats {
   totalPoints: number;
   certificatesEarned: number;
   coursesCompleted: number;
   modulesCompleted: number;
 }
-
 interface UserProfile {
   uid: string;
   name: string;
@@ -24,13 +21,11 @@ interface UserProfile {
   photoURL?: string;
   photo_base64?: string;
 }
-
 export default function SocialProfilePage() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const viewingUserId = searchParams.get('userId');
-
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<UserStats>({
@@ -40,27 +35,21 @@ export default function SocialProfilePage() {
     modulesCompleted: 0
   });
   const [profileUser, setProfileUser] = useState<UserProfile | null>(null);
-
   useEffect(() => {
     if (!currentUser) return;
-
     const loadUserProfile = async () => {
       try {
         setLoading(true);
-
         const targetUserId = viewingUserId || currentUser.uid;
-
         // Load user profile data
         const userQuery = query(collection(db, 'users'), where('uid', '==', targetUserId));
         const userSnapshot = await getDocs(userQuery);
-
         let userData: UserProfile = {
           uid: targetUserId,
           name: 'Unknown User',
           email: '',
           role: 'student',
         };
-
         if (!userSnapshot.empty) {
           const userDoc = userSnapshot.docs[0].data();
           userData = {
@@ -74,9 +63,7 @@ export default function SocialProfilePage() {
             photo_base64: userDoc.photo_base64 || '',
           };
         }
-
         setProfileUser(userData);
-
         // Load user's posts
         const { posts: userPosts } = await communityFeedService.getPosts(
           undefined,
@@ -84,7 +71,6 @@ export default function SocialProfilePage() {
           { userId: targetUserId }
         );
         setPosts(userPosts);
-
         // Load total points from user_points collection (all roles)
         const pointsQuery = query(
           collection(db, 'user_points'),
@@ -92,7 +78,6 @@ export default function SocialProfilePage() {
         );
         const pointsSnapshot = await getDocs(pointsQuery);
         const totalPoints = pointsSnapshot.empty ? 0 : pointsSnapshot.docs[0].data().total_points || 0;
-
         // Only load detailed achievements for students
         const userRole = userData.role.toLowerCase();
         if (userRole === 'student') {
@@ -102,7 +87,6 @@ export default function SocialProfilePage() {
             where('user_id', '==', targetUserId)
           );
           const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
-
           let modulesCompleted = 0;
           enrollmentsSnapshot.docs.forEach(doc => {
             const data = doc.data();
@@ -110,14 +94,12 @@ export default function SocialProfilePage() {
               modulesCompleted++;
             }
           });
-
           // Load certificates
           const certificatesQuery = query(
             collection(db, 'certificates'),
             where('userId', '==', targetUserId)
           );
           const certificatesSnapshot = await getDocs(certificatesQuery);
-
           // Count unique completed courses
           const completedCourses = new Set<string>();
           enrollmentsSnapshot.docs.forEach(doc => {
@@ -126,7 +108,6 @@ export default function SocialProfilePage() {
               completedCourses.add(data.course_id);
             }
           });
-
           setStats({
             totalPoints,
             certificatesEarned: certificatesSnapshot.size,
@@ -148,16 +129,12 @@ export default function SocialProfilePage() {
         setLoading(false);
       }
     };
-
     loadUserProfile();
   }, [currentUser, viewingUserId]);
-
   const handlePostClick = (post: CommunityPost) => {
     navigate('/community-feed', { state: { postId: post.id } });
   };
-
   const isOwnProfile = !viewingUserId || viewingUserId === currentUser?.uid;
-
   if (!currentUser) {
     return (
       <div className="absolute inset-0 flex items-center justify-center">
@@ -165,7 +142,6 @@ export default function SocialProfilePage() {
       </div>
     );
   }
-
   if (loading) {
     return (
       <div className="absolute inset-0 flex items-center justify-center">
@@ -173,7 +149,6 @@ export default function SocialProfilePage() {
       </div>
     );
   }
-
   if (!profileUser) {
     return (
       <div className="absolute inset-0 flex items-center justify-center">
@@ -181,10 +156,8 @@ export default function SocialProfilePage() {
       </div>
     );
   }
-
   const displayPhoto = profileUser.photo_base64 || profileUser.photoURL ||
     `data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22200%22/%3E%3Ctext fill=%22%23999%22 font-family=%22sans-serif%22 font-size=%2260%22 dy=%2210.5rem%22 font-weight=%22bold%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22%3E${profileUser.name?.[0] || 'U'}%3C/text%3E%3C/svg%3E`;
-
   return (
     <div className="absolute inset-0 overflow-y-auto">
       <div className="max-w-5xl mx-auto px-3 md:px-6 py-4 md:py-8">
@@ -197,7 +170,6 @@ export default function SocialProfilePage() {
             Back
           </button>
         )}
-
         <div className="liquid-crystal-panel p-4 md:p-8 mb-4 md:mb-6">
           <div className="flex flex-col items-center">
             <div className="relative mb-4">
@@ -209,11 +181,9 @@ export default function SocialProfilePage() {
                 />
               </div>
             </div>
-
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
               {profileUser.name}
             </h1>
-
             <div className="flex items-center gap-2 mb-4">
               <span className="px-3 py-1 bg-gradient-to-r from-[#D71920] to-[#B91518] text-white text-xs font-bold rounded-full uppercase">
                 {profileUser.role}
@@ -224,19 +194,16 @@ export default function SocialProfilePage() {
                 </span>
               )}
             </div>
-
             <p className="text-center text-gray-700 max-w-2xl mb-6 text-sm md:text-base leading-relaxed">
               {profileUser.bio}
             </p>
           </div>
         </div>
-
         <div className="liquid-crystal-panel p-4 md:p-6 mb-4 md:mb-6">
           <div className="flex items-center gap-2 mb-4">
             <Trophy className="w-5 h-5 text-[#D71920]" />
             <h2 className="text-lg md:text-xl font-bold text-gray-900">Achievements</h2>
           </div>
-
           {profileUser.role.toLowerCase() === 'student' ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
               <div className="liquid-card-overlay p-4 rounded-xl text-center">
@@ -246,7 +213,6 @@ export default function SocialProfilePage() {
                 <div className="text-2xl font-bold text-gray-900 mb-1">{stats.totalPoints}</div>
                 <div className="text-xs text-gray-600 font-semibold">Points</div>
               </div>
-
               <div className="liquid-card-overlay p-4 rounded-xl text-center">
                 <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-[#D71920] to-[#B91518] rounded-full flex items-center justify-center">
                   <Trophy className="w-6 h-6 text-white" />
@@ -254,7 +220,6 @@ export default function SocialProfilePage() {
                 <div className="text-2xl font-bold text-gray-900 mb-1">{stats.certificatesEarned}</div>
                 <div className="text-xs text-gray-600 font-semibold">Certificates</div>
               </div>
-
               <div className="liquid-card-overlay p-4 rounded-xl text-center">
                 <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
                   <BookOpen className="w-6 h-6 text-white" />
@@ -262,7 +227,6 @@ export default function SocialProfilePage() {
                 <div className="text-2xl font-bold text-gray-900 mb-1">{stats.coursesCompleted}</div>
                 <div className="text-xs text-gray-600 font-semibold">Courses</div>
               </div>
-
               <div className="liquid-card-overlay p-4 rounded-xl text-center">
                 <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
                   <BookOpen className="w-6 h-6 text-white" />
@@ -283,14 +247,12 @@ export default function SocialProfilePage() {
             </div>
           )}
         </div>
-
         <div className="liquid-crystal-panel p-4 md:p-6">
           <div className="flex items-center gap-2 mb-4">
             <Grid3x3 className="w-5 h-5 text-[#D71920]" />
             <h2 className="text-lg md:text-xl font-bold text-gray-900">Posts</h2>
             <span className="ml-auto text-sm text-gray-600 font-semibold">{posts.length} posts</span>
           </div>
-
           {posts.length === 0 ? (
             <div className="text-center py-12">
               <Grid3x3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />

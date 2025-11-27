@@ -1,19 +1,4 @@
-import { db } from '../lib/firebase';
-import {
-  collection,
-  doc,
-  setDoc,
-  getDoc,
-  getDocs,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  Timestamp,
-  runTransaction
-} from 'firebase/firestore';
-
+import { db } from '../lib/auth';
 export interface ExamQuestion {
   id: string;
   questionText: string;
@@ -22,7 +7,6 @@ export interface ExamQuestion {
   explanation?: string;
   order: number;
 }
-
 export interface Exam {
   id: string;
   moduleId: string;
@@ -37,7 +21,6 @@ export interface Exam {
   createdAt: string;
   updatedAt: string;
 }
-
 export interface UserExamResult {
   userId: string;
   moduleId: string;
@@ -51,12 +34,10 @@ export interface UserExamResult {
   answers: number[];
   canRetryAt?: string;
 }
-
 export interface ExamSubmission {
   answers: number[];
   timeSpent: number;
 }
-
 export interface ExamResult {
   score: number;
   passed: boolean;
@@ -65,7 +46,6 @@ export interface ExamResult {
   pointsAwarded: number;
   incorrectQuestions: number[];
 }
-
 export const createExam = async (examData: {
   moduleId: string;
   lessonId: string;
@@ -80,13 +60,11 @@ export const createExam = async (examData: {
   try {
     const examId = `${examData.moduleId}_${examData.lessonId}`;
     const examRef = doc(db, 'exams', examId);
-
     const questionsWithIds: ExamQuestion[] = examData.questions.map((q, index) => ({
       ...q,
       id: `q${index + 1}`,
       order: q.order || index
     }));
-
     const exam: Exam = {
       id: examId,
       moduleId: examData.moduleId,
@@ -101,7 +79,6 @@ export const createExam = async (examData: {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-
     await setDoc(examRef, exam);
     console.log('Exam created successfully:', examId);
     return examId;
@@ -110,13 +87,11 @@ export const createExam = async (examData: {
     throw error;
   }
 };
-
 export const getExam = async (moduleId: string, lessonId: string): Promise<Exam | null> => {
   try {
     const examId = `${moduleId}_${lessonId}`;
     const examRef = doc(db, 'exams', examId);
     const examSnap = await getDoc(examRef);
-
     if (examSnap.exists()) {
       return examSnap.data() as Exam;
     }
@@ -126,24 +101,20 @@ export const getExam = async (moduleId: string, lessonId: string): Promise<Exam 
     return null;
   }
 };
-
 export const getExamByCourseId = async (courseId: string): Promise<Exam | null> => {
   try {
     if (!courseId) {
       console.warn('getExamByCourseId: No courseId provided');
       return null;
     }
-
     const examsRef = collection(db, 'exams');
     const q = query(examsRef, where('courseId', '==', courseId));
     const snapshot = await getDocs(q);
-
     if (!snapshot.empty) {
       const examData = snapshot.docs[0].data() as Exam;
       console.log('Found exam for courseId:', courseId, 'examId:', examData.id);
       return examData;
     }
-
     console.log('No exam found for courseId:', courseId);
     return null;
   } catch (error) {
@@ -151,7 +122,6 @@ export const getExamByCourseId = async (courseId: string): Promise<Exam | null> 
     return null;
   }
 };
-
 export const updateExam = async (
   moduleId: string,
   lessonId: string,
@@ -160,19 +130,16 @@ export const updateExam = async (
   try {
     const examId = `${moduleId}_${lessonId}`;
     const examRef = doc(db, 'exams', examId);
-
     await updateDoc(examRef, {
       ...updates,
       updatedAt: new Date().toISOString()
     });
-
     console.log('Exam updated successfully');
   } catch (error) {
     console.error('Error updating exam:', error);
     throw error;
   }
 };
-
 export const deleteExam = async (moduleId: string, lessonId: string): Promise<void> => {
   try {
     const examId = `${moduleId}_${lessonId}`;
@@ -184,7 +151,6 @@ export const deleteExam = async (moduleId: string, lessonId: string): Promise<vo
     throw error;
   }
 };
-
 export const getUserExamResult = async (
   userId: string,
   moduleId: string,
@@ -194,7 +160,6 @@ export const getUserExamResult = async (
     const resultId = `${userId}_${moduleId}_${lessonId}`;
     const resultRef = doc(db, 'userExams', resultId);
     const resultSnap = await getDoc(resultRef);
-
     if (resultSnap.exists()) {
       return resultSnap.data() as UserExamResult;
     }
@@ -209,7 +174,6 @@ export const getUserExamResult = async (
     return null;
   }
 };
-
 export const canTakeExam = async (
   userId: string,
   moduleId: string,
@@ -217,19 +181,15 @@ export const canTakeExam = async (
 ): Promise<{ canTake: boolean; reason?: string; retryAt?: string }> => {
   try {
     const result = await getUserExamResult(userId, moduleId, lessonId);
-
     if (!result) {
       return { canTake: true };
     }
-
     if (result.passed) {
       return { canTake: false, reason: 'Already passed this exam' };
     }
-
     if (result.canRetryAt) {
       const retryTime = new Date(result.canRetryAt).getTime();
       const now = new Date().getTime();
-
       if (now < retryTime) {
         return {
           canTake: false,
@@ -238,14 +198,12 @@ export const canTakeExam = async (
         };
       }
     }
-
     return { canTake: true };
   } catch (error) {
     console.error('Error checking if user can take exam:', error);
     return { canTake: false, reason: 'Error checking eligibility' };
   }
 };
-
 export const submitExam = async (
   userId: string,
   moduleId: string,
@@ -255,9 +213,7 @@ export const submitExam = async (
 ): Promise<ExamResult> => {
   try {
     console.log('submitExam called with:', { userId, moduleId, lessonId, courseId });
-
     let exam: Exam | null = null;
-
     if (courseId && (!moduleId || !lessonId)) {
       exam = await getExamByCourseId(courseId);
       if (exam) {
@@ -267,24 +223,19 @@ export const submitExam = async (
     } else {
       exam = await getExam(moduleId, lessonId);
     }
-
     if (!exam) {
       console.error('Exam not found for:', { moduleId, lessonId, courseId });
       throw new Error('Exam not found');
     }
-
     console.log('Exam found:', exam.id);
-
     if (moduleId && lessonId) {
       const eligibility = await canTakeExam(userId, moduleId, lessonId);
       if (!eligibility.canTake) {
         throw new Error(eligibility.reason || 'Cannot take exam at this time');
       }
     }
-
     let correctAnswers = 0;
     const incorrectQuestions: number[] = [];
-
     exam.questions.forEach((question, index) => {
       if (submission.answers[index] === question.correctIndex) {
         correctAnswers++;
@@ -292,24 +243,19 @@ export const submitExam = async (
         incorrectQuestions.push(index);
       }
     });
-
     const totalQuestions = exam.questions.length;
     const score = Math.round((correctAnswers / totalQuestions) * 100);
     const passed = score >= exam.passingScore;
-
     const resultId = courseId && (!moduleId || !lessonId)
       ? `${exam.id}_${userId}_latest`
       : `${userId}_${moduleId}_${lessonId}`;
     const resultRef = doc(db, 'userExams', resultId);
     const existingResult = await getDoc(resultRef);
-
     const attempts = existingResult.exists() ? (existingResult.data().attempts || 0) + 1 : 1;
     const isFirstPass = existingResult.exists() ? !existingResult.data().passed : true;
-
     let pointsAwarded = 0;
     if (passed && isFirstPass) {
       pointsAwarded = 40;
-
       if (moduleId && lessonId) {
         const previousResult = await getUserExamResult(userId, moduleId, lessonId);
         if (!previousResult || previousResult.attempts === 0) {
@@ -317,9 +263,7 @@ export const submitExam = async (
         }
       }
     }
-
     const now = new Date();
-
     const userResult: any = {
       userId,
       moduleId,
@@ -331,23 +275,18 @@ export const submitExam = async (
       lastAttemptAt: now.toISOString(),
       answers: submission.answers
     };
-
     if (passed) {
       userResult.passedAt = now.toISOString();
     } else if (existingResult.exists() && existingResult.data().passedAt) {
       userResult.passedAt = existingResult.data().passedAt;
     }
-
     if (!passed && exam.cooldownMinutes > 0) {
       userResult.canRetryAt = new Date(now.getTime() + exam.cooldownMinutes * 60 * 1000).toISOString();
     }
-
     await setDoc(resultRef, userResult);
-
     if (passed) {
       await handleExamPass(userId, moduleId, lessonId, courseId, pointsAwarded);
     }
-
     return {
       score,
       passed,
@@ -361,7 +300,6 @@ export const submitExam = async (
     throw error;
   }
 };
-
 const handleExamPass = async (
   userId: string,
   moduleId: string,
@@ -374,19 +312,15 @@ const handleExamPass = async (
       const userRef = doc(db, 'users', userId);
       const userPointsRef = doc(db, 'user_points', userId);
       const courseProgressRef = doc(db, 'course_progress', `${userId}_${courseId}`);
-
       const userSnap = await transaction.get(userRef);
       const userPointsSnap = await transaction.get(userPointsRef);
-
       if (userPointsSnap.exists()) {
         const currentPoints = userPointsSnap.data().total_points || 0;
         const newPoints = currentPoints + pointsAwarded;
-
         transaction.update(userPointsRef, {
           total_points: newPoints,
           updated_at: new Date().toISOString()
         });
-
         const pointEventRef = doc(collection(db, 'point_events'));
         transaction.set(pointEventRef, {
           user_id: userId,
@@ -396,7 +330,6 @@ const handleExamPass = async (
           created_at: new Date().toISOString()
         });
       }
-
       transaction.set(
         courseProgressRef,
         {
@@ -409,7 +342,6 @@ const handleExamPass = async (
         },
         { merge: true }
       );
-
       if (userSnap.exists()) {
         const recentActivity = userSnap.data().recentActivity || [];
         const newActivity = {
@@ -419,40 +351,34 @@ const handleExamPass = async (
           timestamp: new Date().toISOString()
         };
         const updatedActivity = [newActivity, ...recentActivity].slice(0, 20);
-
         transaction.update(userRef, {
           recentActivity: updatedActivity,
           lastActive: new Date().toISOString()
         });
       }
     });
-
     console.log('Exam pass handled successfully');
   } catch (error) {
     console.error('Error handling exam pass:', error);
     throw error;
   }
 };
-
 export const getExamsByModule = async (moduleId: string): Promise<Exam[]> => {
   try {
     const examsRef = collection(db, 'exams');
     const q = query(examsRef, where('moduleId', '==', moduleId), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
-
     return snapshot.docs.map(doc => doc.data() as Exam);
   } catch (error) {
     console.error('Error getting exams by module:', error);
     return [];
   }
 };
-
 export const getUserExamHistory = async (userId: string): Promise<UserExamResult[]> => {
   try {
     const resultsRef = collection(db, 'userExams');
     const q = query(resultsRef, where('userId', '==', userId), orderBy('lastAttemptAt', 'desc'));
     const snapshot = await getDocs(q);
-
     return snapshot.docs.map(doc => doc.data() as UserExamResult);
   } catch (error) {
     console.error('Error getting user exam history:', error);

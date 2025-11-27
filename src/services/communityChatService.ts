@@ -1,30 +1,7 @@
-import {
-  collection,
-  doc,
-  setDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-  Timestamp,
-  onSnapshot,
-  updateDoc,
-  arrayUnion,
-  DocumentSnapshot,
-  QueryConstraint,
-  writeBatch,
-  increment,
-} from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { db, storage, auth, functions } from '../lib/firebase';
-import { httpsCallable } from 'firebase/functions';
+import { db, storage, auth, functions, supabase } from '../lib/auth';
 import { aiModerationService } from './aiModerationService';
 import { reputationService } from './reputationService';
 import { messageMentionsService } from './messageMentionsService';
-
 export interface Conversation {
   id: string;
   type: 'group' | 'private';
@@ -42,7 +19,6 @@ export interface Conversation {
   isArchivedBy?: Record<string, boolean>;
   category?: 'general' | 'marketplace';
 }
-
 export interface Message {
   messageId: string;
   senderId: string;
@@ -64,7 +40,6 @@ export interface Message {
   readBy?: Record<string, Timestamp>;
   replyTo?: string;
 }
-
 export interface MessageReport {
   reporterId: string;
   messageRef: string;
@@ -76,14 +51,11 @@ export interface MessageReport {
   handledBy?: string;
   handledAt?: Timestamp;
 }
-
 const PAGE_SIZE = 50;
-
 export const communityChatService = {
   async ensureCommunityChat(): Promise<void> {
     const communityRef = doc(db, 'groupChats', 'publicRoom');
     const communityDoc = await getDoc(communityRef);
-
     if (!communityDoc.exists()) {
       const conversationData: Conversation = {
         id: 'publicRoom',
@@ -96,15 +68,12 @@ export const communityChatService = {
         mutedBy: {},
         isArchivedBy: {},
       };
-
       await setDoc(communityRef, conversationData);
     }
   },
-
   async joinCommunityChat(userId: string): Promise<void> {
     const communityRef = doc(db, 'groupChats', 'publicRoom');
     const communityDoc = await getDoc(communityRef);
-
     if (communityDoc.exists()) {
       const currentMembers = communityDoc.data().members || [];
       if (!currentMembers.includes(userId)) {
@@ -114,7 +83,6 @@ export const communityChatService = {
       }
     }
   },
-
   async createConversation(
     type: 'group' | 'private',
     title: string,
@@ -123,26 +91,21 @@ export const communityChatService = {
   ): Promise<string> {
     const userId = auth.currentUser?.uid;
     if (!userId) throw new Error('Not authenticated');
-
     if (!memberIds.includes(userId)) {
       memberIds.push(userId);
     }
-
     if (memberIds.length < 2) {
       throw new Error('Conversation must have at least 2 members');
     }
-
     if (type === 'private' && memberIds.length > 2) {
       throw new Error('Private conversations can only have 2 members');
     }
-
     if (type === 'private') {
       const existingConv = await this.findPrivateConversation(memberIds);
       if (existingConv) {
         return existingConv.id;
       }
     }
-
     const conversationRef = doc(collection(db, 'groupChats'));
     const conversationData: Conversation = {
       id: conversationRef.id,
@@ -156,60 +119,47 @@ export const communityChatService = {
       isArchivedBy: {},
       category: category || 'general',
     };
-
     await setDoc(conversationRef, conversationData);
     return conversationRef.id;
   },
-
   async findPrivateConversation(memberIds: string[]): Promise<Conversation | null> {
     if (memberIds.length !== 2) return null;
-
     const q = query(
       collection(db, 'groupChats'),
       where('type', '==', 'private'),
       where('members', 'array-contains', memberIds[0])
     );
-
     const snapshot = await getDocs(q);
     const conv = snapshot.docs.find(
       (doc) =>
         doc.data().members.length === 2 &&
         doc.data().members.includes(memberIds[1])
     );
-
     if (conv) {
       return { id: conv.id, ...conv.data() } as Conversation;
     }
-
     return null;
   },
-
   async getConversations(): Promise<Conversation[]> {
     const userId = auth.currentUser?.uid;
     if (!userId) throw new Error('Not authenticated');
-
     const communityRef = doc(db, 'groupChats', 'publicRoom');
     const communityDoc = await getDoc(communityRef);
     const conversations: Conversation[] = [];
-
     if (communityDoc.exists()) {
       conversations.push({ id: communityDoc.id, ...communityDoc.data() } as Conversation);
     }
-
     const q = query(
       collection(db, 'groupChats'),
       where('members', 'array-contains', userId),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
-
     const snapshot = await getDocs(q);
     const userConversations = snapshot.docs
       .filter(doc => doc.id !== 'publicRoom')
       .map((doc) => ({ id: doc.id, ...doc.data() } as Conversation));
-
     conversations.push(...userConversations);
-
     return conversations.sort((a, b) => {
       if (a.id === 'publicRoom') return -1;
       if (b.id === 'publicRoom') return 1;
@@ -218,11 +168,9 @@ export const communityChatService = {
       return bTime - aTime;
     });
   },
-
   subscribeToConversations(callback: (conversations: Conversation[]) => void) {
     const userId = auth.currentUser?.uid;
     if (!userId) throw new Error('Not authenticated');
-
     const communityRef = doc(db, 'groupChats', 'publicRoom');
     const unsubscribeCommunity = onSnapshot(communityRef, async () => {
       const q = query(
@@ -231,7 +179,6 @@ export const communityChatService = {
         orderBy('createdAt', 'desc'),
         limit(50)
       );
-
       const snapshot = await getDocs(q);
       const userConversations = snapshot.docs
         .filter(doc => doc.id !== 'publicRoom')
@@ -239,16 +186,12 @@ export const communityChatService = {
           id: doc.id,
           ...doc.data(),
         } as Conversation));
-
       const communityDoc = await getDoc(communityRef);
       const conversations: Conversation[] = [];
-
       if (communityDoc.exists()) {
         conversations.push({ id: communityDoc.id, ...communityDoc.data() } as Conversation);
       }
-
       conversations.push(...userConversations);
-
       const sorted = conversations.sort((a, b) => {
         if (a.id === 'publicRoom') return -1;
         if (b.id === 'publicRoom') return 1;
@@ -256,17 +199,14 @@ export const communityChatService = {
         const bTime = b.lastMessage?.createdAt?.toMillis() || b.createdAt?.toMillis() || 0;
         return bTime - aTime;
       });
-
       callback(sorted);
     });
-
     const q = query(
       collection(db, 'groupChats'),
       where('members', 'array-contains', userId),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
-
     const unsubscribeUser = onSnapshot(q, async (snapshot) => {
       const userConversations = snapshot.docs
         .filter(doc => doc.id !== 'publicRoom')
@@ -274,16 +214,12 @@ export const communityChatService = {
           id: doc.id,
           ...doc.data(),
         } as Conversation));
-
       const communityDoc = await getDoc(communityRef);
       const conversations: Conversation[] = [];
-
       if (communityDoc.exists()) {
         conversations.push({ id: communityDoc.id, ...communityDoc.data() } as Conversation);
       }
-
       conversations.push(...userConversations);
-
       const sorted = conversations.sort((a, b) => {
         if (a.id === 'publicRoom') return -1;
         if (b.id === 'publicRoom') return 1;
@@ -291,16 +227,13 @@ export const communityChatService = {
         const bTime = b.lastMessage?.createdAt?.toMillis() || b.createdAt?.toMillis() || 0;
         return bTime - aTime;
       });
-
       callback(sorted);
     });
-
     return () => {
       unsubscribeCommunity();
       unsubscribeUser();
     };
   },
-
   async sendMessage(
     conversationId: string,
     content: string,
@@ -310,7 +243,6 @@ export const communityChatService = {
   ): Promise<string> {
     const userId = auth.currentUser?.uid;
     if (!userId) throw new Error('Not authenticated');
-
     let userName = 'Unknown User';
     try {
       const userDoc = await getDoc(doc(db, 'users', userId));
@@ -319,12 +251,10 @@ export const communityChatService = {
       console.error('Error fetching user document:', error);
       throw new Error('Failed to fetch user data. Please make sure you have a user profile.');
     }
-
     const postingCheck = await reputationService.checkPostingAllowed(userId);
     if (!postingCheck.allowed) {
       throw new Error(postingCheck.reason || 'Messaging not allowed');
     }
-
     if (content.trim()) {
       const moderationResult = await aiModerationService.moderateContent(
         userId,
@@ -332,11 +262,9 @@ export const communityChatService = {
         content,
         'chat'
       );
-
       if (!moderationResult.allowed) {
         throw new Error(moderationResult.reason);
       }
-
       if (moderationResult.action === 'warn') {
         console.warn('⚠️ Content warning:', moderationResult.reason);
         window.dispatchEvent(new CustomEvent('showModerationWarning', {
@@ -345,12 +273,10 @@ export const communityChatService = {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
-
     const messageRef = doc(collection(db, 'groupChats', conversationId, 'messages'));
     let attachmentUrl: string | null = null;
     let attachmentRef: string | null = null;
     let attachmentMetadata: any = null;
-
     if (attachmentFile && attachmentFile.type.startsWith('image/')) {
       await new Promise<void>((resolve, reject) => {
         const reader = new FileReader();
@@ -367,7 +293,6 @@ export const communityChatService = {
         reader.onerror = reject;
         reader.readAsDataURL(attachmentFile);
       });
-
       try {
         const awardAttachment = httpsCallable(functions, 'awardAttachmentUpload');
         await awardAttachment({ conversationId });
@@ -375,7 +300,6 @@ export const communityChatService = {
         console.warn('Failed to award attachment points:', error);
       }
     }
-
     const messageData: Message = {
       messageId: messageRef.id,
       senderId: userId,
@@ -392,7 +316,6 @@ export const communityChatService = {
       readBy: { [userId]: Timestamp.now() },
       replyTo: replyTo || null,
     };
-
     try {
       console.log('Attempting to create message in:', conversationId);
       console.log('Message data:', { ...messageData, attachmentUrl: attachmentUrl ? 'present' : 'none' });
@@ -402,12 +325,10 @@ export const communityChatService = {
       console.error('Error creating message:', error);
       throw new Error('Failed to send message. Permission denied.');
     }
-
     try {
       const conversationRef = doc(db, 'groupChats', conversationId);
       const conversationDoc = await getDoc(conversationRef);
       const conversationTitle = conversationDoc.data()?.title || 'Chat';
-
       await updateDoc(conversationRef, {
         lastMessage: {
           text: content,
@@ -419,7 +340,6 @@ export const communityChatService = {
       console.error('Error updating conversation:', error);
       // Don't throw here, message was already sent
     }
-
     const mentions = await messageMentionsService.extractMentions(content);
     if (mentions.length > 0) {
       await messageMentionsService.createMentionNotifications(
@@ -432,42 +352,34 @@ export const communityChatService = {
         mentions
       );
     }
-
     // try {
     //   const awardMessage = httpsCallable(functions, 'awardMessageSent');
     //   await awardMessage({ conversationId });
     // } catch (error) {
     //   console.warn('Failed to award message points:', error);
     // }
-
     return messageRef.id;
   },
-
   async getMessages(
     conversationId: string,
     pageSize: number = PAGE_SIZE,
     lastDoc?: DocumentSnapshot
   ): Promise<{ messages: Message[]; lastDoc: DocumentSnapshot | null }> {
     const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
-
     if (lastDoc) {
       constraints.push(startAfter(lastDoc));
     }
-
     const q = query(
       collection(db, 'groupChats', conversationId, 'messages'),
       ...constraints
     );
-
     const snapshot = await getDocs(q);
     const messages = snapshot.docs.map((doc) => doc.data() as Message);
-
     return {
       messages: messages.reverse(),
       lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
     };
   },
-
   subscribeToMessages(
     conversationId: string,
     callback: (messages: Message[]) => void,
@@ -479,7 +391,6 @@ export const communityChatService = {
       orderBy('createdAt', 'desc'),
       limit(limitCount)
     );
-
     return onSnapshot(
       q,
       (snapshot) => {
@@ -494,17 +405,14 @@ export const communityChatService = {
       }
     );
   },
-
   async markAsRead(conversationId: string, messageId: string): Promise<void> {
     const userId = auth.currentUser?.uid;
     if (!userId) return;
-
     const messageRef = doc(db, 'groupChats', conversationId, 'messages', messageId);
     await updateDoc(messageRef, {
       [`readBy.${userId}`]: Timestamp.now(),
     });
   },
-
   async addReaction(
     conversationId: string,
     messageId: string,
@@ -513,22 +421,16 @@ export const communityChatService = {
   ): Promise<void> {
     const userId = auth.currentUser?.uid;
     if (!userId) throw new Error('Not authenticated');
-
     const messageRef = doc(db, 'groupChats', conversationId, 'messages', messageId);
     const messageDoc = await getDoc(messageRef);
     const messageData = messageDoc.data();
-
     if (!messageData) throw new Error('Message not found');
-
     const reactions = messageData.reactions || {};
     const emojiReactions = reactions[emoji] || [];
-
     if (!emojiReactions.includes(userId)) {
       emojiReactions.push(userId);
       reactions[emoji] = emojiReactions;
-
       await updateDoc(messageRef, { reactions });
-
       if (recipientId !== userId) {
         try {
           const awardReaction = httpsCallable(functions, 'awardEmojiReaction');
@@ -539,7 +441,6 @@ export const communityChatService = {
       }
     }
   },
-
   async removeReaction(
     conversationId: string,
     messageId: string,
@@ -547,27 +448,20 @@ export const communityChatService = {
   ): Promise<void> {
     const userId = auth.currentUser?.uid;
     if (!userId) throw new Error('Not authenticated');
-
     const messageRef = doc(db, 'groupChats', conversationId, 'messages', messageId);
     const messageDoc = await getDoc(messageRef);
     const messageData = messageDoc.data();
-
     if (!messageData) throw new Error('Message not found');
-
     const reactions = messageData.reactions || {};
     const emojiReactions = reactions[emoji] || [];
-
     const updatedReactions = emojiReactions.filter((id: string) => id !== userId);
-
     if (updatedReactions.length > 0) {
       reactions[emoji] = updatedReactions;
     } else {
       delete reactions[emoji];
     }
-
     await updateDoc(messageRef, { reactions });
   },
-
   async likeMessage(
     conversationId: string,
     messageId: string,
@@ -575,12 +469,10 @@ export const communityChatService = {
   ): Promise<void> {
     const userId = auth.currentUser?.uid;
     if (!userId) throw new Error('Not authenticated');
-
     const messageRef = doc(db, 'groupChats', conversationId, 'messages', messageId);
     await updateDoc(messageRef, {
       likesCount: increment(1),
     });
-
     if (recipientId !== userId) {
       try {
         const awardLike = httpsCallable(functions, 'awardMessageLike');
@@ -590,7 +482,6 @@ export const communityChatService = {
       }
     }
   },
-
   async editMessage(
     conversationId: string,
     messageId: string,
@@ -598,25 +489,20 @@ export const communityChatService = {
   ): Promise<void> {
     const userId = auth.currentUser?.uid;
     if (!userId) throw new Error('Not authenticated');
-
     const messageRef = doc(db, 'groupChats', conversationId, 'messages', messageId);
     const messageDoc = await getDoc(messageRef);
-
     if (!messageDoc.exists()) {
       throw new Error('Message not found');
     }
-
     const messageData = messageDoc.data();
     if (messageData.senderId !== userId) {
       throw new Error('Not authorized to edit this message');
     }
-
     await updateDoc(messageRef, {
       content: newContent,
       editedAt: Timestamp.now(),
     });
   },
-
   async reportMessage(
     conversationId: string,
     messageId: string,
@@ -625,7 +511,6 @@ export const communityChatService = {
     const reportFunc = httpsCallable(functions, 'reportMessage');
     await reportFunc({ conversationId, messageId, reason });
   },
-
   async deleteAttachment(attachmentPath: string): Promise<void> {
     const storageRef = ref(storage, attachmentPath);
     await deleteObject(storageRef);

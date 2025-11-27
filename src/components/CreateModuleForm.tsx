@@ -1,21 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Upload, FolderPlus, Image as ImageIcon, Check, Plus, Trash2, Edit } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '../lib/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db } from '../lib/auth';
 import {
   createMainModule,
   createSubmodule,
   getAllMainModules,
   MainModule
 } from '../services/mainModuleService';
-
 interface CreateModuleFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
-
 export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateModuleFormProps) {
   const [moduleType, setModuleType] = useState<'main' | 'submodule'>('main');
   const [title, setTitle] = useState('');
@@ -27,12 +24,10 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
   const [mainModules, setMainModules] = useState<MainModule[]>([]);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [availableCourses, setAvailableCourses] = useState<any[]>([]);
   const [selectedCourse1, setSelectedCourse1] = useState('');
   const [selectedCourse2, setSelectedCourse2] = useState('');
   const [availableSubmodules, setAvailableSubmodules] = useState<any[]>([]);
-
   const [submodules, setSubmodules] = useState<{
     id: string;
     title: string;
@@ -49,7 +44,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
   const [submoduleCourse1, setSubmoduleCourse1] = useState('');
   const [submoduleCourse2, setSubmoduleCourse2] = useState('');
   const submoduleFileInputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     if (isOpen) {
       loadMainModules();
@@ -57,12 +51,10 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
       loadSubmodules();
     }
   }, [isOpen]);
-
   const loadMainModules = async () => {
     const modules = await getAllMainModules();
     setMainModules(modules);
   };
-
   const loadCourses = async () => {
     try {
       const coursesRef = collection(db, 'courses');
@@ -77,7 +69,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
       console.error('Error loading courses:', error);
     }
   };
-
   const loadSubmodules = async () => {
     try {
       const submodulesRef = collection(db, 'submodules');
@@ -91,7 +82,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
       console.error('Error loading submodules:', error);
     }
   };
-
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -99,7 +89,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
         alert('Please select an image file (PNG or JPG)');
         return;
       }
-
       const reader = new FileReader();
       reader.onloadend = () => {
         setCoverImage(reader.result as string);
@@ -107,20 +96,16 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
       reader.readAsDataURL(file);
     }
   };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!title.trim() || !description.trim() || !coverImage) {
       alert('Please fill in all fields and upload a cover image');
       return;
     }
-
     if (moduleType === 'submodule' && !parentModuleId) {
       alert('Please select a parent module');
       return;
     }
-
     setLoading(true);
     try {
       if (moduleType === 'main') {
@@ -130,14 +115,12 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
           coverImage,
           visible
         };
-
         if (selectedCourse1 && selectedCourse2) {
           moduleData.course1_id = selectedCourse1;
           moduleData.course2_id = selectedCourse2;
         } else if (selectedCourse1) {
           moduleData.course_id = selectedCourse1;
         }
-
         if (submodules.length > 0) {
           moduleData.submodules = submodules.map(sub => ({
             id: sub.id,
@@ -152,7 +135,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
             order: sub.order
           }));
         }
-
         await createMainModule(moduleData);
         alert('Main module created successfully!');
       } else {
@@ -163,18 +145,15 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
           description: description.trim(),
           coverImage
         };
-
         if (selectedCourse1 && selectedCourse2) {
           submoduleData.course1_id = selectedCourse1;
           submoduleData.course2_id = selectedCourse2;
         } else if (selectedCourse1) {
           submoduleData.course_id = selectedCourse1;
         }
-
         await createSubmodule(submoduleData);
         alert('Submodule created successfully!');
       }
-
       resetForm();
       onSuccess();
       onClose();
@@ -185,7 +164,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
       setLoading(false);
     }
   };
-
   const resetForm = () => {
     setModuleType('main');
     setTitle('');
@@ -200,7 +178,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
     setShowSubmoduleForm(false);
     resetSubmoduleForm();
   };
-
   const resetSubmoduleForm = () => {
     setSubmoduleTitle('');
     setSubmoduleDescription('');
@@ -208,13 +185,11 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
     setSubmoduleCourse1('');
     setSubmoduleCourse2('');
   };
-
   const handleAddSubmodule = () => {
     if (!submoduleTitle.trim() || !submoduleDescription.trim() || !submoduleCoverImage) {
       alert('Please fill in all submodule fields and upload a cover image');
       return;
     }
-
     const newSubmodule = {
       id: `sub_${Date.now()}`,
       title: submoduleTitle.trim(),
@@ -224,16 +199,13 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
       course2_id: submoduleCourse2,
       order: submodules.length + 1
     };
-
     setSubmodules([...submodules, newSubmodule]);
     resetSubmoduleForm();
     setShowSubmoduleForm(false);
   };
-
   const handleRemoveSubmodule = (id: string) => {
     setSubmodules(submodules.filter(sub => sub.id !== id));
   };
-
   const handleSubmoduleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -248,7 +220,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
       reader.readAsDataURL(file);
     }
   };
-
   return (
     <AnimatePresence>
       {isOpen && (
@@ -270,7 +241,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                 </div>
               </div>
             </div>
-
             <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6 sm:space-y-8">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
@@ -317,7 +287,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                   </button>
                 </div>
               </div>
-
               {moduleType === 'submodule' && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
@@ -343,7 +312,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                       ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-3">
                       Submodule Number
@@ -360,10 +328,8 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                       ))}
                     </select>
                   </div>
-
                   <div className="space-y-4 p-6 glass-light rounded-2xl border-2 border-blue-200">
                     <h3 className="text-lg font-bold text-gray-900 mb-4">Assign Courses to Submodule</h3>
-
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-3">
                         Video 1 / Course 1 (Optional)
@@ -381,7 +347,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                         ))}
                       </select>
                     </div>
-
                     {selectedCourse1 && (
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">
@@ -403,14 +368,12 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                         </select>
                       </div>
                     )}
-
                     <div className="text-sm text-gray-600 bg-blue-50 p-4 rounded-xl">
                       <strong>Note:</strong> If you select 2 videos, they will be stored as course1_id and course2_id. If you select only 1 video, it will be stored as course_id.
                     </div>
                   </div>
                 </motion.div>
               )}
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Module Title
@@ -424,7 +387,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                   required
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Description
@@ -438,7 +400,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                   required
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Cover Image
@@ -484,12 +445,10 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                   )}
                 </div>
               </div>
-
               {moduleType === 'main' && (
                 <>
                   <div className="space-y-4 p-6 glass-light rounded-2xl border-2 border-blue-200">
                     <h3 className="text-lg font-bold text-gray-900 mb-4">Assign Courses</h3>
-
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-3">
                         Video 1 / Course 1 (Optional)
@@ -507,7 +466,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                         ))}
                       </select>
                     </div>
-
                     {selectedCourse1 && (
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-3">
@@ -529,12 +487,10 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                         </select>
                       </div>
                     )}
-
                     <div className="text-sm text-gray-600 bg-blue-50 p-4 rounded-xl">
                       <strong>Note:</strong> If you select 2 videos, they will be stored as course1_id and course2_id. If you select only 1 video, it will be stored as course_id.
                     </div>
                   </div>
-
                   <div className="space-y-4 p-6 glass-light rounded-2xl border-2 border-green-200">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-bold text-gray-900">Submodules ({submodules.length})</h3>
@@ -547,7 +503,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                         Add Submodule
                       </button>
                     </div>
-
                     {submodules.map((sub, index) => (
                       <div key={sub.id} className="p-4 bg-white border-2 border-gray-200 rounded-xl">
                         <div className="flex items-start justify-between gap-4">
@@ -572,7 +527,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                         </div>
                       </div>
                     ))}
-
                     {showSubmoduleForm && (
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
@@ -581,7 +535,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                         className="p-6 bg-green-50 border-2 border-green-300 rounded-xl space-y-4"
                       >
                         <h4 className="font-bold text-gray-900">New Submodule</h4>
-
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">Title</label>
                           <input
@@ -592,7 +545,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                             className="w-full px-4 py-3 glass-light border-2 border-gray-200 rounded-xl"
                           />
                         </div>
-
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
                           <textarea
@@ -603,7 +555,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                             className="w-full px-4 py-3 glass-light border-2 border-gray-200 rounded-xl resize-none"
                           />
                         </div>
-
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">Cover Image</label>
                           <input
@@ -635,7 +586,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                             </button>
                           )}
                         </div>
-
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">Course 1 (Optional)</label>
                           <select
@@ -651,7 +601,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                             ))}
                           </select>
                         </div>
-
                         {submoduleCourse1 && (
                           <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">Course 2 (Optional)</label>
@@ -671,7 +620,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                             </select>
                           </div>
                         )}
-
                         <div className="flex gap-3">
                           <button
                             type="button"
@@ -694,7 +642,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                       </motion.div>
                     )}
                   </div>
-
                   <div className="flex items-center gap-3 p-4 sm:p-5 glass-light rounded-2xl border border-gray-200">
                     <button
                       type="button"
@@ -716,7 +663,6 @@ export default function CreateModuleForm({ isOpen, onClose, onSuccess }: CreateM
                   </div>
                 </>
               )}
-
               <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 pt-4">
                 <button
                   type="button"

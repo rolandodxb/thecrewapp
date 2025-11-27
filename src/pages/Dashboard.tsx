@@ -144,19 +144,20 @@ export default function Dashboard() {
 
   if (currentUser.role === 'student') {
     return (
-      <motion.div
-        initial="hidden"
-        animate="visible"
-        variants={containerVariants}
-      >
-        <motion.div variants={itemVariants} className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome back, {currentUser.name.split(' ')[0]}!
-          </h1>
-          <p className="text-base text-gray-600">
-            Continue your journey to cabin crew excellence
-          </p>
-        </motion.div>
+      <>
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={containerVariants}
+        >
+          <motion.div variants={itemVariants} className="mb-6 md:mb-8">
+            <h1 className="text-3xl md:text-4xl font-bold text-[#000000] mb-2">
+              Welcome back, {currentUser.name.split(' ')[0]}!
+            </h1>
+            <p className="text-sm md:text-base text-gray-600">
+              Continue your journey to cabin crew excellence
+            </p>
+          </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
           <motion.div
@@ -204,7 +205,8 @@ export default function Dashboard() {
             />
           </motion.div>
         )}
-      </motion.div>
+        </motion.div>
+      </>
     );
   }
 
@@ -215,11 +217,11 @@ export default function Dashboard() {
         animate="visible"
         variants={containerVariants}
       >
-        <motion.div variants={itemVariants} className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <motion.div variants={itemVariants} className="mb-6 md:mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold text-[#000000] mb-2">
             Mentor Dashboard
           </h1>
-          <p className="text-base text-gray-600">
+          <p className="text-sm md:text-base text-gray-600">
             Manage your students and educational content
           </p>
         </motion.div>
@@ -253,21 +255,21 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-          <motion.div variants={itemVariants}>
-            <EmptyState
-              icon={GraduationCap}
-              title="Start Creating Content"
-              description="No uploads yet. Start by adding your first course or resource to help your students succeed in their cabin crew journey."
-              action={{
-                label: 'Upload Content',
-                onClick: () => navigate('/coach-dashboard'),
-              }}
-              secondaryAction={{
-                label: 'View Students',
-                onClick: () => navigate('/students'),
-              }}
-            />
-          </motion.div>
+        <motion.div variants={itemVariants}>
+          <EmptyState
+            icon={GraduationCap}
+            title="Start Creating Content"
+            description="No uploads yet. Start by adding your first course or resource to help your students succeed in their cabin crew journey."
+            action={{
+              label: 'Upload Content',
+              onClick: () => navigate('/coach-dashboard'),
+            }}
+            secondaryAction={{
+              label: 'View Students',
+              onClick: () => navigate('/students'),
+            }}
+          />
+        </motion.div>
       </motion.div>
     );
   }
@@ -279,11 +281,11 @@ export default function Dashboard() {
         animate="visible"
         variants={containerVariants}
       >
-        <motion.div variants={itemVariants} className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <motion.div variants={itemVariants} className="mb-6 md:mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold text-[#000000] mb-2">
             Governor Dashboard
           </h1>
-          <p className="text-base text-gray-600">
+          <p className="text-sm md:text-base text-gray-600">
             System overview and management
           </p>
         </motion.div>

@@ -49,6 +49,8 @@ export async function getAnalyticsSummary(): Promise<AnalyticsData> {
     totalUsersSnapshot,
     activeUsersSnapshot,
     newUsersSnapshot,
+    totalMessagesSnapshot,
+    recentMessagesSnapshot,
     coursesSnapshot,
     enrollmentsSnapshot,
   ] = await Promise.all([
@@ -59,42 +61,13 @@ export async function getAnalyticsSummary(): Promise<AnalyticsData> {
     getCountFromServer(
       query(collection(db, 'users'), where('createdAt', '>=', oneWeekAgo))
     ),
-    getDocs(collection(db, 'courses')),
-    getCountFromServer(collection(db, 'course_enrollments')),
-  ]);
-
-  // Count messages from all message collections
-  const [
-    messagesSnapshot,
-    communityMessagesSnapshot,
-    supportMessagesSnapshot,
-    recentMessagesSnapshot,
-    recentCommunityMessagesSnapshot,
-    recentSupportMessagesSnapshot,
-  ] = await Promise.all([
     getCountFromServer(collection(db, 'messages')),
-    getCountFromServer(collection(db, 'community_messages')),
-    getCountFromServer(collection(db, 'support_messages')),
     getCountFromServer(
       query(collection(db, 'messages'), where('createdAt', '>=', oneWeekAgo))
     ),
-    getCountFromServer(
-      query(collection(db, 'community_messages'), where('createdAt', '>=', oneWeekAgo))
-    ),
-    getCountFromServer(
-      query(collection(db, 'support_messages'), where('createdAt', '>=', oneWeekAgo))
-    ),
+    getDocs(collection(db, 'courses')),
+    getCountFromServer(collection(db, 'course_enrollments')),
   ]);
-
-  const totalMessagesCount =
-    messagesSnapshot.data().count +
-    communityMessagesSnapshot.data().count +
-    supportMessagesSnapshot.data().count;
-
-  const recentMessagesCount =
-    recentMessagesSnapshot.data().count +
-    recentCommunityMessagesSnapshot.data().count +
-    recentSupportMessagesSnapshot.data().count;
 
   const usersSnapshot = await getDocs(collection(db, 'users'));
   const subscriptionsByPlan = {
@@ -115,26 +88,11 @@ export async function getAnalyticsSummary(): Promise<AnalyticsData> {
   const conversationsSnapshot = await getDocs(collection(db, 'conversations'));
   const conversationMessages: Record<string, number> = {};
 
-  // Count messages from all collections
-  const [allMessages, allCommunityMessages] = await Promise.all([
-    getDocs(query(collection(db, 'messages'), limit(10000))),
-    getDocs(query(collection(db, 'community_messages'), limit(10000))),
-  ]);
-
-  allMessages.docs.forEach((doc) => {
+  const messagesSnapshot = await getDocs(collection(db, 'messages'));
+  messagesSnapshot.docs.forEach((doc) => {
     const message = doc.data();
     const convId = message.conversationId;
-    if (convId) {
-      conversationMessages[convId] = (conversationMessages[convId] || 0) + 1;
-    }
-  });
-
-  allCommunityMessages.docs.forEach((doc) => {
-    const message = doc.data();
-    const convId = message.conversationId || message.channelId;
-    if (convId) {
-      conversationMessages[convId] = (conversationMessages[convId] || 0) + 1;
-    }
+    conversationMessages[convId] = (conversationMessages[convId] || 0) + 1;
   });
 
   const topConversations = conversationsSnapshot.docs
@@ -153,8 +111,8 @@ export async function getAnalyticsSummary(): Promise<AnalyticsData> {
     activeUsers: activeUsersSnapshot.data().count,
     totalUsers: totalUsersSnapshot.data().count,
     newUsersThisWeek: newUsersSnapshot.data().count,
-    totalMessages: totalMessagesCount,
-    messagesThisWeek: recentMessagesCount,
+    totalMessages: totalMessagesSnapshot.data().count,
+    messagesThisWeek: recentMessagesSnapshot.data().count,
     totalCourses: coursesSnapshot.docs.length,
     activeCourses: coursesSnapshot.docs.filter((doc) => doc.data().published).length,
     enrollments: enrollmentsSnapshot.data().count,
@@ -208,41 +166,31 @@ async function getUserGrowthData(days: number) {
 
 async function getMessageActivityData(days: number) {
   const data: Array<{ date: string; count: number }> = [];
-
-  // Fetch messages from all collections
-  const [messagesSnapshot, communityMessagesSnapshot, supportMessagesSnapshot] = await Promise.all([
-    getDocs(query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(5000))),
-    getDocs(query(collection(db, 'community_messages'), orderBy('createdAt', 'desc'), limit(5000))),
-    getDocs(query(collection(db, 'support_messages'), orderBy('createdAt', 'desc'), limit(1000))),
-  ]);
+  const messagesSnapshot = await getDocs(
+    query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(5000))
+  );
 
   const dailyCounts: Record<string, number> = {};
 
-  const processMessages = (docs: any[]) => {
-    docs.forEach((doc) => {
-      const message = doc.data();
-      if (message.createdAt) {
-        let date: Date;
-        if (message.createdAt.toDate && typeof message.createdAt.toDate === 'function') {
-          date = message.createdAt.toDate();
-        } else if (message.createdAt instanceof Date) {
-          date = message.createdAt;
-        } else if (typeof message.createdAt === 'string') {
-          date = new Date(message.createdAt);
-        } else if (typeof message.createdAt === 'number') {
-          date = new Date(message.createdAt);
-        } else {
-          return;
-        }
-        const dateStr = date.toISOString().split('T')[0];
-        dailyCounts[dateStr] = (dailyCounts[dateStr] || 0) + 1;
+  messagesSnapshot.docs.forEach((doc) => {
+    const message = doc.data();
+    if (message.createdAt) {
+      let date: Date;
+      if (message.createdAt.toDate && typeof message.createdAt.toDate === 'function') {
+        date = message.createdAt.toDate();
+      } else if (message.createdAt instanceof Date) {
+        date = message.createdAt;
+      } else if (typeof message.createdAt === 'string') {
+        date = new Date(message.createdAt);
+      } else if (typeof message.createdAt === 'number') {
+        date = new Date(message.createdAt);
+      } else {
+        return;
       }
-    });
-  };
-
-  processMessages(messagesSnapshot.docs);
-  processMessages(communityMessagesSnapshot.docs);
-  processMessages(supportMessagesSnapshot.docs);
+      const dateStr = date.toISOString().split('T')[0];
+      dailyCounts[dateStr] = (dailyCounts[dateStr] || 0) + 1;
+    }
+  });
 
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date();
@@ -261,33 +209,17 @@ export async function getRealtimeMetrics() {
   const oneMinuteAgo = Timestamp.fromDate(new Date(Date.now() - 60 * 1000));
   const fiveMinutesAgo = Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
 
-  const [
-    recentMessagesSnapshot,
-    recentCommunityMessagesSnapshot,
-    recentSupportMessagesSnapshot,
-    activeUsersSnapshot
-  ] = await Promise.all([
+  const [recentMessagesSnapshot, activeUsersSnapshot] = await Promise.all([
     getCountFromServer(
       query(collection(db, 'messages'), where('createdAt', '>=', oneMinuteAgo))
-    ),
-    getCountFromServer(
-      query(collection(db, 'community_messages'), where('createdAt', '>=', oneMinuteAgo))
-    ),
-    getCountFromServer(
-      query(collection(db, 'support_messages'), where('createdAt', '>=', oneMinuteAgo))
     ),
     getCountFromServer(
       query(collection(db, 'userPresence'), where('lastSeen', '>=', fiveMinutesAgo))
     ),
   ]);
 
-  const totalRecentMessages =
-    recentMessagesSnapshot.data().count +
-    recentCommunityMessagesSnapshot.data().count +
-    recentSupportMessagesSnapshot.data().count;
-
   return {
-    messagesPerMinute: totalRecentMessages,
+    messagesPerMinute: recentMessagesSnapshot.data().count,
     activeNow: activeUsersSnapshot.data().count,
   };
 }

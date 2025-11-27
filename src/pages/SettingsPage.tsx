@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { User, Lock, Bell, Globe, Palette, Shield, Trash2, Mail, Camera, Save, Smartphone, Monitor, MapPin, Clock, Eye, Users, UserX } from 'lucide-react';
+import { User, Lock, Bell, Globe, Palette, Shield, Trash2, Mail, Camera, Save, Smartphone, Monitor, MapPin, Clock } from 'lucide-react';
 import { doc, updateDoc, collection, query, where, getDocs, orderBy, limit as limitQuery, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
@@ -8,7 +8,6 @@ import { countries } from '../data/countries';
 import { useNavigate } from 'react-router-dom';
 import TwoFactorSetup from '../components/TwoFactorSetup';
 import { Copy, Check } from 'lucide-react';
-import { getPrivacySettings, updatePrivacySettings, PrivacySettings } from '../services/privacyService';
 
 type SettingsTab = 'profile' | 'account' | 'notifications' | 'preferences' | 'privacy';
 
@@ -39,7 +38,6 @@ export default function SettingsPage() {
 
   const [loginSessions, setLoginSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
-  const [privacySettings, setPrivacySettings] = useState<PrivacySettings | null>(null);
 
 
   useEffect(() => {
@@ -51,32 +49,9 @@ export default function SettingsPage() {
 
       if (activeTab === 'privacy') {
         loadLoginSessions();
-        loadPrivacySettings();
       }
     }
   }, [currentUser, activeTab]);
-
-  const loadPrivacySettings = async () => {
-    if (!currentUser) return;
-    try {
-      const settings = await getPrivacySettings(currentUser.uid);
-      setPrivacySettings(settings);
-    } catch (error) {
-      console.error('Error loading privacy settings:', error);
-    }
-  };
-
-  const handlePrivacyUpdate = async (updates: Partial<PrivacySettings>) => {
-    if (!currentUser) return;
-    try {
-      await updatePrivacySettings(currentUser.uid, updates);
-      setPrivacySettings(prev => prev ? { ...prev, ...updates } : null);
-      setMessage('Privacy settings updated!');
-    } catch (error) {
-      console.error('Error updating privacy settings:', error);
-      setMessage('Failed to update privacy settings');
-    }
-  };
 
 
   const loadLoginSessions = async () => {
@@ -627,170 +602,6 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {privacySettings && (
-                    <>
-                      <div className="p-6 bg-white rounded-xl border-2 border-gray-200">
-                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                          <Eye className="w-5 h-5 text-[#D71920]" />
-                          Profile Visibility
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-4">Control who can see your profile information</p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handlePrivacyUpdate({ profile_visibility: 'public' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.profile_visibility === 'public'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Public
-                          </button>
-                          <button
-                            onClick={() => handlePrivacyUpdate({ profile_visibility: 'friends' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.profile_visibility === 'friends'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Friends Only
-                          </button>
-                          <button
-                            onClick={() => handlePrivacyUpdate({ profile_visibility: 'private' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.profile_visibility === 'private'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Private
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="p-6 bg-white rounded-xl border-2 border-gray-200">
-                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                          <Globe className="w-5 h-5 text-[#D71920]" />
-                          Posts Visibility
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-4">Control who can see your posts</p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handlePrivacyUpdate({ posts_visibility: 'public' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.posts_visibility === 'public'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Public
-                          </button>
-                          <button
-                            onClick={() => handlePrivacyUpdate({ posts_visibility: 'friends' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.posts_visibility === 'friends'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Friends Only
-                          </button>
-                          <button
-                            onClick={() => handlePrivacyUpdate({ posts_visibility: 'private' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.posts_visibility === 'private'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Private
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="p-6 bg-white rounded-xl border-2 border-gray-200">
-                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                          <Trophy className="w-5 h-5 text-[#D71920]" />
-                          Achievements Visibility
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-4">Control who can see your achievements and progress</p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handlePrivacyUpdate({ achievements_visibility: 'public' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.achievements_visibility === 'public'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Public
-                          </button>
-                          <button
-                            onClick={() => handlePrivacyUpdate({ achievements_visibility: 'friends' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.achievements_visibility === 'friends'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Friends Only
-                          </button>
-                          <button
-                            onClick={() => handlePrivacyUpdate({ achievements_visibility: 'private' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.achievements_visibility === 'private'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Private
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="p-6 bg-white rounded-xl border-2 border-gray-200">
-                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                          <Mail className="w-5 h-5 text-[#D71920]" />
-                          Message Permissions
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-4">Control who can send you messages</p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handlePrivacyUpdate({ allow_messages_from: 'everyone' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.allow_messages_from === 'everyone'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Everyone
-                          </button>
-                          <button
-                            onClick={() => handlePrivacyUpdate({ allow_messages_from: 'friends' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.allow_messages_from === 'friends'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Friends Only
-                          </button>
-                          <button
-                            onClick={() => handlePrivacyUpdate({ allow_messages_from: 'nobody' })}
-                            className={`px-4 py-2 rounded-lg font-semibold transition ${
-                              privacySettings.allow_messages_from === 'nobody'
-                                ? 'bg-[#D71920] text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            Nobody
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
                   <div className="p-6 bg-blue-50 rounded-xl border border-blue-200">
                     <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2">
                       <Lock className="w-5 h-5 text-blue-600" />

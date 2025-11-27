@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { supabaseChatService, SupabaseChatMessage } from '../services/supabaseChatService';
+import { supabaseChatService, SupabaseChatMessage, Conversation } from '../services/supabaseChatService';
 import { auth } from '../lib/firebase';
 import { Search, Mic, Send, MessageCircle, Square, Smile, Paperclip, X, Play, Pause } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -131,6 +131,8 @@ export default function CommunityPage() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
   const [messages, setMessages] = useState<SupabaseChatMessage[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [messageText, setMessageText] = useState('');
@@ -149,9 +151,24 @@ export default function CommunityPage() {
   const conversationId = supabaseChatService.getPublicRoomId();
 
   useEffect(() => {
+    const initializePublicRoom = async () => {
+      await supabaseChatService.ensurePublicRoom();
+      const convs = await supabaseChatService.getConversations();
+      setConversations(convs);
+      const publicRoom = convs.find(c => c.id === conversationId);
+      if (publicRoom) {
+        setSelectedConversation(publicRoom);
+      }
+    };
+    initializePublicRoom();
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!selectedConversation) return;
+
     setLoading(true);
     const unsubscribe = supabaseChatService.subscribeToMessages(
-      conversationId,
+      selectedConversation.id,
       (msgs) => {
         setMessages(msgs);
         setLoading(false);
@@ -165,18 +182,18 @@ export default function CommunityPage() {
     return () => {
       unsubscribe();
     };
-  }, [conversationId]);
+  }, [selectedConversation]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!currentUser || (!messageText.trim() && !selectedFile)) return;
+    if (!currentUser || (!messageText.trim() && !selectedFile) || !selectedConversation) return;
 
     setSending(true);
     try {
-      let messageType = 'text';
+      let messageType: 'text' | 'image' | 'audio' | 'file' = 'text';
       let messageContent = messageText.trim();
 
       if (selectedFile) {
@@ -193,7 +210,7 @@ export default function CommunityPage() {
       }
 
       await supabaseChatService.sendMessage(
-        conversationId,
+        selectedConversation.id,
         messageContent,
         messageType,
         selectedFile || undefined
@@ -203,6 +220,7 @@ export default function CommunityPage() {
       setShowEmojiPicker(false);
     } catch (error) {
       console.error('Error sending message:', error);
+      alert('Failed to send message: ' + (error as Error).message);
     } finally {
       setSending(false);
     }
@@ -282,7 +300,7 @@ export default function CommunityPage() {
   }, []);
 
   const filteredConversations = conversations.filter(conv =>
-    conv?.title?.toLowerCase().includes(searchTerm.toLowerCase())
+    conv?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (!currentUser) {
@@ -361,13 +379,11 @@ export default function CommunityPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                      {conv.title?.charAt(0) || 'C'}
+                      {conv.name?.charAt(0) || 'C'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 text-sm truncate">{conv.title}</h3>
-                      <p className="text-xs text-gray-500 truncate">
-                        {conv.members?.length || 0} members
-                      </p>
+                      <h3 className="font-semibold text-gray-900 text-sm truncate">{conv.name}</h3>
+                      <p className="text-xs text-gray-500 truncate">Community Room</p>
                     </div>
                   </div>
                 </motion.button>
@@ -594,10 +610,7 @@ export default function CommunityPage() {
                   <input
                     type="text"
                     value={messageText}
-                    onChange={(e) => {
-                      setMessageText(e.target.value);
-                      startTyping();
-                    }}
+                    onChange={(e) => setMessageText(e.target.value)}
                     onKeyPress={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();

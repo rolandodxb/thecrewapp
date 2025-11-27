@@ -1,51 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { communityChatService, Conversation } from '../services/communityChatService';
 import { presenceService } from '../services/presenceService';
-import { auth, db } from '../lib/firebase';
-import { checkFeatureAccess } from '../utils/featureAccess';
-import FeatureLock from '../components/FeatureLock';
-import ChatSidebar from '../components/chat/ChatSidebar';
-import ChatWindow from '../components/chat/ChatWindow';
-import CreateConversationDropdown from '../components/chat/CreateConversationDropdown';
-import MentionsView from '../components/chat/MentionsView';
+import { auth } from '../lib/firebase';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useTypingIndicator } from '../hooks/useTypingIndicator';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { Home, User, Settings, LogOut, Bell, ChevronDown } from 'lucide-react';
+import { Search, Mic, Send, MessageCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function CommunityPage() {
-  const { currentUser, logout } = useApp();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { currentUser } = useApp();
   const navigate = useNavigate();
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showMentions, setShowMentions] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, loading, hasMore, loadMoreMessages } = useChatMessages(
-    selectedConversation?.id || null
-  );
-
+  const { messages, loading } = useChatMessages(selectedConversation?.id || null);
   const { typingUsers, startTyping, stopTyping } = useTypingIndicator(
     selectedConversation?.id || null,
     currentUser?.uid || '',
     currentUser?.name || ''
   );
-
-  useEffect(() => {
-    const chatId = searchParams.get('chat');
-    if (chatId && conversations.length > 0) {
-      const conversation = conversations.find((c) => c.id === chatId);
-      if (conversation) {
-        setSelectedConversation(conversation);
-        setSearchParams({});
-      }
-    }
-  }, [searchParams, conversations, setSearchParams]);
 
   useEffect(() => {
     const initCommunityChat = async () => {
@@ -65,6 +44,9 @@ export default function CommunityPage() {
 
     const unsubscribeConversations = communityChatService.subscribeToConversations((convs) => {
       setConversations(convs);
+      if (!selectedConversation && convs.length > 0) {
+        setSelectedConversation(convs[0]);
+      }
     });
 
     return () => {
@@ -73,335 +55,286 @@ export default function CommunityPage() {
     };
   }, []);
 
-  const handleSendMessage = async (message: string, file?: File) => {
-    if (!currentUser || !selectedConversation || !message.trim()) return;
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSendMessage = async () => {
+    if (!currentUser || !selectedConversation || !messageText.trim()) return;
 
     setSending(true);
     try {
       await communityChatService.sendMessage(
         selectedConversation.id,
-        message,
-        file ? 'image' : 'text',
-        file
+        messageText.trim(),
+        'text'
       );
+      setMessageText('');
       stopTyping();
     } catch (error) {
       console.error('Error sending message:', error);
-      alert('Failed to send message');
     } finally {
       setSending(false);
     }
   };
 
-  const handleSelectConversation = (conversation: Conversation) => {
-    setSelectedConversation(conversation);
-  };
+  const filteredConversations = conversations.filter(conv =>
+    conv?.title?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const handleCreateConversation = () => {
-    setShowCreateModal(true);
-  };
-
-  const handleReaction = async (messageId: string, emoji: string) => {
-    if (!currentUser || !selectedConversation) return;
-
-    try {
-      await communityChatService.addReaction(
-        selectedConversation.id,
-        messageId,
-        emoji,
-        currentUser.uid
-      );
-    } catch (error) {
-      console.error('Error adding reaction:', error);
-    }
-  };
-
-  const handleEditMessage = async (messageId: string, newContent: string) => {
-    if (!currentUser || !selectedConversation) return;
-
-    try {
-      await communityChatService.editMessage(
-        selectedConversation.id,
-        messageId,
-        newContent
-      );
-    } catch (error) {
-      console.error('Error editing message:', error);
-      alert('Failed to edit message');
-    }
-  };
-
-  const handleReportMessage = async (messageId: string) => {
-    if (!currentUser || !selectedConversation) return;
-
-    const reason = prompt('Please provide a reason for reporting this message:');
-    if (!reason || !reason.trim()) return;
-
-    try {
-      await communityChatService.reportMessage(
-        selectedConversation.id,
-        messageId,
-        reason.trim()
-      );
-      alert('Message reported successfully. Our team will review it.');
-    } catch (error) {
-      console.error('Error reporting message:', error);
-      alert('Failed to report message');
-    }
-  };
-
-  const handleCreateGroup = async (title: string, memberIds: string[]) => {
-    if (!currentUser) return;
-
-    try {
-      const conversationId = await communityChatService.createConversation(
-        'group',
-        title,
-        memberIds
-      );
-      const newConv = conversations.find((c) => c.id === conversationId);
-      if (newConv) {
-        setSelectedConversation(newConv);
-      }
-      setShowCreateModal(false);
-    } catch (error) {
-      console.error('Error creating group:', error);
-      alert('Failed to create group');
-    }
-  };
-
-  const handleCreatePrivate = async (memberId: string) => {
-    if (!currentUser) return;
-
-    try {
-      const conversationId = await communityChatService.createConversation(
-        'private',
-        'Direct Message',
-        [memberId]
-      );
-      const newConv = conversations.find((c) => c.id === conversationId);
-      if (newConv) {
-        setSelectedConversation(newConv);
-      }
-      setShowCreateModal(false);
-    } catch (error) {
-      console.error('Error creating private chat:', error);
-      alert('Failed to create private chat');
-    }
-  };
-
-  const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string; photoURL?: string }>>([]);
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      if (!currentUser) return;
-
-      try {
-        const usersQuery = query(
-          collection(db, 'users'),
-          where('uid', '!=', currentUser.uid)
-        );
-        const snapshot = await getDocs(usersQuery);
-        const users = snapshot.docs.map((doc) => ({
-          id: doc.data().uid,
-          name: doc.data().name || 'Unknown',
-          photoURL: doc.data().photoURL,
-        }));
-        setAvailableUsers(users);
-      } catch (error) {
-        console.error('Error fetching users:', error);
-      }
-    };
-
-    fetchUsers();
-  }, [currentUser]);
-
-  if (!currentUser) return null;
-
-  const chatAccess = checkFeatureAccess(currentUser, 'chat');
-  if (!chatAccess.allowed) {
+  if (!currentUser) {
     return (
-      <FeatureLock
-        requiredPlan={chatAccess.requiresPlan || 'pro'}
-        featureName="Community Chat"
-        description={chatAccess.message}
-      />
+      <div className="h-screen flex items-center justify-center">
+        <p className="text-gray-600">Please log in to access community chat.</p>
+      </div>
     );
   }
 
   return (
-    <>
-      {/* Mobile View - Toggle between sidebar and chat */}
-      <div className="h-full flex flex-col lg:hidden">
-        {!selectedConversation ? (
-          <ChatSidebar
-            conversations={conversations}
-            selectedConversationId={null}
-            currentUserId={currentUser.uid}
-            onSelectConversation={handleSelectConversation}
-            onCreateConversation={handleCreateConversation}
-            showCreateForm={showCreateModal}
-            createFormContent={
-              <CreateConversationDropdown
-                onClose={() => setShowCreateModal(false)}
-                onCreateGroup={handleCreateGroup}
-                onCreatePrivate={handleCreatePrivate}
-                availableUsers={availableUsers}
-              />
-            }
+    <div className="h-screen flex bg-gradient-to-br from-blue-50 via-blue-100 to-blue-200 p-4 gap-4 overflow-hidden">
+      {/* Left Sidebar */}
+      <motion.div
+        initial={{ x: -50, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+        className="w-80 flex flex-col gap-3"
+      >
+        {/* Top Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="px-5 py-2 bg-white rounded-full text-sm font-medium text-gray-700 hover:bg-gray-50 transition shadow-sm"
+          >
+            home
+          </button>
+          <button
+            onClick={() => navigate(-1)}
+            className="px-5 py-2 bg-white rounded-full text-sm font-medium text-gray-700 hover:bg-gray-50 transition shadow-sm"
+          >
+            back
+          </button>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search"
+            className="w-full pl-11 pr-11 py-2.5 bg-white rounded-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition shadow-sm"
           />
-        ) : (
-          <ChatWindow
-            conversation={selectedConversation}
-            messages={messages}
-            currentUserId={currentUser.uid}
-            loading={loading}
-            hasMore={hasMore}
-            onLoadMore={loadMoreMessages}
-            typingUsers={typingUsers}
-            onSendMessage={handleSendMessage}
-            onTyping={startTyping}
-            sending={sending}
-            onBack={() => setSelectedConversation(null)}
-            onReact={handleReaction}
-            onEdit={handleEditMessage}
-            onReport={handleReportMessage}
-            onViewMentions={() => setShowMentions(true)}
-          />
-        )}
-      </div>
+          <Mic className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        </div>
 
-      {/* Desktop View - Full screen with sidebar */}
-      <div className="hidden lg:flex lg:h-screen lg:w-screen lg:bg-gray-50">
-        {/* Left sidebar with conversations and navigation */}
-        <div className="w-80 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col">
-          {/* Top navigation header */}
-          <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white">
-            <Link to="/dashboard" className="flex items-center gap-2 hover:opacity-70 transition">
-              <Home className="w-5 h-5 text-gray-700" />
-              <span className="font-bold text-gray-900">Crew Academy</span>
-            </Link>
+        {/* Conversation List Card */}
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="flex-1 bg-white rounded-3xl shadow-lg overflow-hidden flex flex-col"
+        >
+          <div className="p-4">
+            <p className="text-sm text-gray-500 font-medium">conversation list</p>
+          </div>
 
-            <div className="flex items-center gap-2">
-              <Link to="/notifications" className="p-2 hover:bg-gray-100 rounded-lg transition">
-                <Bell className="w-5 h-5 text-gray-700" />
-              </Link>
-
-              <div className="relative">
-                <button
-                  onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition"
+          <div className="flex-1 overflow-y-auto px-2">
+            <AnimatePresence mode="popLayout">
+              {filteredConversations.map((conv, index) => (
+                <motion.button
+                  key={conv.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ delay: index * 0.05 }}
+                  onClick={() => setSelectedConversation(conv)}
+                  className={`w-full px-3 py-3 text-left rounded-2xl hover:bg-gray-50 transition mb-2 ${
+                    selectedConversation?.id === conv.id ? 'bg-blue-50' : ''
+                  }`}
                 >
-                  {currentUser.photoURL ? (
-                    <img
-                      src={currentUser.photoURL}
-                      alt={currentUser.name}
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">
-                        {currentUser.name.charAt(0).toUpperCase()}
-                      </span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                      {conv.title?.charAt(0) || 'C'}
                     </div>
-                  )}
-                </button>
-
-                {showProfileMenu && (
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
-                    <Link
-                      to="/profile"
-                      className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition"
-                      onClick={() => setShowProfileMenu(false)}
-                    >
-                      <User className="w-4 h-4 text-gray-600" />
-                      <span className="text-gray-900 font-medium">Profile</span>
-                    </Link>
-                    <Link
-                      to="/settings"
-                      className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition"
-                      onClick={() => setShowProfileMenu(false)}
-                    >
-                      <Settings className="w-4 h-4 text-gray-600" />
-                      <span className="text-gray-900 font-medium">Settings</span>
-                    </Link>
-                    <hr className="my-2 border-gray-200" />
-                    <button
-                      onClick={() => {
-                        logout();
-                        navigate('/login');
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition text-red-600"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span className="font-medium">Logout</span>
-                    </button>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 text-sm truncate">{conv.title}</h3>
+                      <p className="text-xs text-gray-500 truncate">
+                        {conv.members?.length || 0} members
+                      </p>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
+                </motion.button>
+              ))}
+            </AnimatePresence>
           </div>
+        </motion.div>
+      </motion.div>
 
-          {/* Chat conversations list */}
-          <div className="flex-1 overflow-hidden">
-            <ChatSidebar
-              conversations={conversations}
-              selectedConversationId={selectedConversation?.id || null}
-              currentUserId={currentUser.uid}
-              onSelectConversation={handleSelectConversation}
-              onCreateConversation={handleCreateConversation}
-              showCreateForm={showCreateModal}
-              createFormContent={
-                <CreateConversationDropdown
-                  onClose={() => setShowCreateModal(false)}
-                  onCreateGroup={handleCreateGroup}
-                  onCreatePrivate={handleCreatePrivate}
-                  availableUsers={availableUsers}
+      {/* Main Chat Area */}
+      <motion.div
+        initial={{ x: 50, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
+        className="flex-1 bg-white rounded-3xl shadow-lg overflow-hidden flex flex-col"
+      >
+        {selectedConversation ? (
+          <>
+            {/* Top Search Bar */}
+            <div className="p-4 border-b border-gray-100">
+              <div className="relative max-w-md">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search"
+                  className="w-full pl-11 pr-11 py-2.5 bg-gray-50 rounded-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
                 />
-              }
-            />
-          </div>
-        </div>
-
-        {/* Main chat area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {selectedConversation ? (
-            <ChatWindow
-              conversation={selectedConversation}
-              messages={messages}
-              currentUserId={currentUser.uid}
-              loading={loading}
-              hasMore={hasMore}
-              onLoadMore={loadMoreMessages}
-              typingUsers={typingUsers}
-              onSendMessage={handleSendMessage}
-              onTyping={startTyping}
-              sending={sending}
-              onBack={() => setSelectedConversation(null)}
-              onReact={handleReaction}
-              onEdit={handleEditMessage}
-              onReport={handleReportMessage}
-              onViewMentions={() => setShowMentions(true)}
-            />
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-12 h-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Select a conversation</h3>
-                <p className="text-gray-600">Choose from your conversations to start chatting</p>
+                <Mic className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               </div>
             </div>
-          )}
-        </div>
-      </div>
 
-      {showMentions && (
-        <MentionsView userId={currentUser.uid} onClose={() => setShowMentions(false)} />
-      )}
-    </>
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              {!loading && messages.length === 0 ? (
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="h-full flex flex-col items-center justify-center"
+                >
+                  <div className="text-center">
+                    <h3 className="text-xl font-bold text-gray-900 mb-1">Message</h3>
+                    <p className="text-sm text-gray-500">Description</p>
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="space-y-4">
+                  <AnimatePresence mode="popLayout">
+                    {messages.map((message, index) => {
+                      const isOwn = message.senderId === currentUser?.uid;
+                      return (
+                        <motion.div
+                          key={message.id}
+                          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{
+                            type: 'spring',
+                            damping: 25,
+                            stiffness: 300,
+                            delay: index * 0.02
+                          }}
+                          className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div className={`flex items-end gap-2 max-w-[70%] ${isOwn ? 'flex-row-reverse' : ''}`}>
+                            {!isOwn && (
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                {message.senderName?.charAt(0) || 'U'}
+                              </div>
+                            )}
+                            <div
+                              className={`px-4 py-3 rounded-2xl ${
+                                isOwn
+                                  ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-md'
+                                  : 'bg-gray-100 text-gray-900 rounded-bl-md'
+                              }`}
+                            >
+                              {!isOwn && (
+                                <p className="text-xs font-semibold mb-1 opacity-70">
+                                  {message.senderName}
+                                </p>
+                              )}
+                              <p className="text-sm leading-relaxed">{message.content}</p>
+                              <p className={`text-xs mt-1 ${isOwn ? 'text-white/70' : 'text-gray-500'}`}>
+                                {message.createdAt?.toDate?.()?.toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                  {typingUsers.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="flex items-center gap-2 text-sm text-gray-500"
+                    >
+                      <div className="flex gap-1">
+                        <motion.div
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ repeat: Infinity, duration: 1, delay: 0 }}
+                          className="w-2 h-2 bg-gray-400 rounded-full"
+                        />
+                        <motion.div
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ repeat: Infinity, duration: 1, delay: 0.2 }}
+                          className="w-2 h-2 bg-gray-400 rounded-full"
+                        />
+                        <motion.div
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ repeat: Infinity, duration: 1, delay: 0.4 }}
+                          className="w-2 h-2 bg-gray-400 rounded-full"
+                        />
+                      </div>
+                      <span>{typingUsers.join(', ')} typing...</span>
+                    </motion.div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+
+            {/* Message Input */}
+            <div className="p-4 border-t border-gray-100">
+              <div className="flex items-center gap-3 max-w-4xl mx-auto">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={messageText}
+                    onChange={(e) => {
+                      setMessageText(e.target.value);
+                      startTyping();
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    placeholder="Type Message"
+                    className="w-full pl-4 pr-11 py-3 bg-gray-100 rounded-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+                  />
+                  <Mic className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 cursor-pointer hover:text-blue-500 transition" />
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleSendMessage}
+                  disabled={!messageText.trim() || sending}
+                  className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full hover:shadow-lg transition disabled:opacity-50"
+                >
+                  <Send className="w-5 h-5" />
+                </motion.button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="flex-1 flex items-center justify-center"
+          >
+            <div className="text-center">
+              <h3 className="text-xl font-bold text-gray-900 mb-1">Message</h3>
+              <p className="text-sm text-gray-500">Description</p>
+            </div>
+          </motion.div>
+        )}
+      </motion.div>
+    </div>
   );
 }

@@ -52,18 +52,18 @@ export default function ModernDashboardLayout({ children, title }: ModernDashboa
           animate={{ y: 0, opacity: 1 }}
           className="fixed top-2 sm:top-3 md:top-4 right-2 sm:right-3 md:right-4 z-40 flex items-center gap-1.5 sm:gap-2 md:gap-3"
         >
-          {/* Search Button for Mobile - Shows modal */}
+          {/* Waitlist Button - Blue */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => setShowMobileSearch(true)}
-            className="lg:hidden p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
-            title="Search"
+            onClick={() => navigate('/governor/waitlist')}
+            className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+            title="Waitlist Dashboard"
           >
-            <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
+            <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
           </motion.button>
 
-          {/* Notifications Button - Pink */}
+          {/* Notifications Button - Magenta */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -74,15 +74,26 @@ export default function ModernDashboardLayout({ children, title }: ModernDashboa
             <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
           </motion.button>
 
-          {/* Profile Button - Green */}
+          {/* Social Profile Button - Green */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/profile')}
+            onClick={() => navigate(`/social-profile/${currentUser?.uid}`)}
             className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
-            title="My Profile"
+            title="Social Profile"
           >
             <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
+          </motion.button>
+
+          {/* Search Button for Mobile */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowMobileSearch(true)}
+            className="lg:hidden p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+            title="Search"
+          >
+            <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
           </motion.button>
 
           {/* Logout Button - White */}

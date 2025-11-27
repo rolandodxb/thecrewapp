@@ -26,6 +26,11 @@ const FILTERS = [
 
 export default function CommunityFeedPage() {
   const { currentUser } = useApp();
+
+  if (!currentUser) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChannel, setSelectedChannel] = useState<Channel>('all');
@@ -216,7 +221,7 @@ export default function CommunityFeedPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
               >
-                <PostCard post={post} currentUser={currentUser} onDeleted={() => loadPosts(true)} />
+                <PostCard post={post} currentUser={currentUser!} onDeleted={() => loadPosts(true)} />
               </motion.div>
             ))}
           </div>

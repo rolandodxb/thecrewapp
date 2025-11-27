@@ -6,8 +6,9 @@ import { presenceService } from '../services/presenceService';
 import { auth } from '../lib/firebase';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useTypingIndicator } from '../hooks/useTypingIndicator';
-import { Search, Mic, Send, MessageCircle } from 'lucide-react';
+import { Search, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ChatInput from '../components/chat/ChatInput';
 
 export default function CommunityPage() {
   const { currentUser } = useApp();
@@ -60,16 +61,35 @@ export default function CommunityPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = async () => {
-    if (!currentUser || !selectedConversation || !messageText.trim()) return;
+  const handleSendMessage = async (message: string, file?: File) => {
+    if (!currentUser || !selectedConversation || (!message.trim() && !file)) return;
 
     setSending(true);
     try {
-      await communityChatService.sendMessage(
-        selectedConversation.id,
-        messageText.trim(),
-        'text'
-      );
+      if (file) {
+        // Handle file upload - voice or attachment
+        if (file.type.startsWith('audio/')) {
+          await communityChatService.sendMessage(
+            selectedConversation.id,
+            message || 'Voice message',
+            'voice',
+            file
+          );
+        } else {
+          await communityChatService.sendMessage(
+            selectedConversation.id,
+            message || 'Sent a file',
+            'file',
+            file
+          );
+        }
+      } else {
+        await communityChatService.sendMessage(
+          selectedConversation.id,
+          message.trim(),
+          'text'
+        );
+      }
       setMessageText('');
       stopTyping();
     } catch (error) {
@@ -302,35 +322,13 @@ export default function CommunityPage() {
 
             {/* Message Input */}
             <div className="p-4 border-t border-gray-100">
-              <div className="flex items-center gap-3 max-w-4xl mx-auto">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={messageText}
-                    onChange={(e) => {
-                      setMessageText(e.target.value);
-                      startTyping();
-                    }}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder="Type Message"
-                    className="w-full pl-4 pr-11 py-3 bg-gray-100 rounded-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-                  />
-                  <Mic className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 cursor-pointer hover:text-blue-500 transition" />
-                </div>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleSendMessage}
-                  disabled={!messageText.trim() || sending}
-                  className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full hover:shadow-lg transition disabled:opacity-50"
-                >
-                  <Send className="w-5 h-5" />
-                </motion.button>
+              <div className="max-w-4xl mx-auto">
+                <ChatInput
+                  onSend={handleSendMessage}
+                  onTyping={startTyping}
+                  disabled={sending}
+                  placeholder="Type a message..."
+                />
               </div>
             </div>
           </>

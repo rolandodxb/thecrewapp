@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Trophy, Medal, Award, TrendingUp, Shield, AlertTriangle, Mail, Star } from 'lucide-react';
+import { Trophy, Medal, Award, TrendingUp, Shield, AlertTriangle, Mail, Star, UserPlus, UserMinus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getLeaderboard, UserPoints } from '../services/rewardsService';
 import BadgeDisplay from '../components/BadgeDisplay';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
+import { useApp } from '../context/AppContext';
+import { followUser, unfollowUser, isFollowing } from '../services/friendsService';
 
 interface UserWithDetails extends UserPoints {
   userName: string;
@@ -25,6 +27,7 @@ interface GroupedUsers {
 
 export default function LeaderboardPage() {
   const navigate = useNavigate();
+  const { currentUser } = useApp();
   const [groupedUsers, setGroupedUsers] = useState<GroupedUsers>({
     governors: [],
     mentors: [],
@@ -33,10 +36,55 @@ export default function LeaderboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [followingStatus, setFollowingStatus] = useState<Record<string, boolean>>({});
+  const [followLoading, setFollowLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadLeaderboard();
   }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      checkFollowingStatus();
+    }
+  }, [groupedUsers, currentUser]);
+
+  const checkFollowingStatus = async () => {
+    if (!currentUser) return;
+    const allUsers = [...groupedUsers.governors, ...groupedUsers.mentors, ...groupedUsers.support, ...groupedUsers.students];
+    const statusMap: Record<string, boolean> = {};
+
+    for (const user of allUsers) {
+      if (user.user_id !== currentUser.uid) {
+        statusMap[user.user_id] = await isFollowing(currentUser.uid, user.user_id);
+      }
+    }
+    setFollowingStatus(statusMap);
+  };
+
+  const handleFollowToggle = async (userId: string) => {
+    if (!currentUser || userId === currentUser.uid) return;
+
+    setFollowLoading({ ...followLoading, [userId]: true });
+    try {
+      if (followingStatus[userId]) {
+        await unfollowUser(currentUser.uid, userId);
+        setFollowingStatus({ ...followingStatus, [userId]: false });
+      } else {
+        await followUser(
+          currentUser.uid,
+          currentUser.name || 'User',
+          currentUser.photoURL,
+          userId
+        );
+        setFollowingStatus({ ...followingStatus, [userId]: true });
+      }
+    } catch (error) {
+      console.error('Error toggling follow:', error);
+    } finally {
+      setFollowLoading({ ...followLoading, [userId]: false });
+    }
+  };
 
   const loadLeaderboard = async () => {
     setLoading(true);
@@ -215,13 +263,44 @@ export default function LeaderboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-auto md:ml-auto">
+          <div className="flex items-center justify-between md:justify-end gap-3 md:gap-4 w-full md:w-auto md:ml-auto">
             <div className="text-right">
               <p className="text-2xl md:text-3xl font-bold text-[#D71920]">
                 {user.total_points.toLocaleString()}
               </p>
               <p className="text-xs text-gray-500">points</p>
             </div>
+
+            {currentUser && user.user_id !== currentUser.uid && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFollowToggle(user.user_id);
+                }}
+                disabled={followLoading[user.user_id]}
+                className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl font-semibold text-sm transition-all ${
+                  followingStatus[user.user_id]
+                    ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    : 'bg-gradient-to-r from-[#D71920] to-pink-600 text-white hover:shadow-lg'
+                } disabled:opacity-50`}
+              >
+                {followLoading[user.user_id] ? (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : followingStatus[user.user_id] ? (
+                  <>
+                    <UserMinus className="w-4 h-4" />
+                    <span className="hidden sm:inline">Following</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    <span className="hidden sm:inline">Follow</span>
+                  </>
+                )}
+              </motion.button>
+            )}
           </div>
         </div>
 

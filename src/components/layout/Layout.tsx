@@ -1,10 +1,11 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { AlertCircle, Search, Mic, Bell, Settings, User, LogOut } from 'lucide-react';
+import { AlertCircle, Search, Mic, Bell, Settings, User, LogOut, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import OfflineIndicator from '../OfflineIndicator';
 import ModernSidebar from './ModernSidebar';
+import GlobalSearchBar from '../GlobalSearchBar';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 
@@ -16,6 +17,7 @@ export default function Layout({ children }: LayoutProps) {
   const { banners, currentUser } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   // Special pages that need full-screen (no layout)
   const isFullScreenPage = ['/chat', '/login', '/register', '/'].includes(location.pathname);
@@ -57,59 +59,109 @@ export default function Layout({ children }: LayoutProps) {
         {/* Modern Sidebar */}
         {currentUser && <ModernSidebar />}
 
-        {/* Top Bar */}
+        {/* Desktop Search Bar - Top Center */}
         {currentUser && (
           <motion.div
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="fixed top-4 right-4 z-40 flex items-center gap-3"
+            className="hidden lg:block fixed top-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-2xl px-4"
           >
-            {/* Search Bar */}
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search"
-                className="w-64 pl-11 pr-11 py-2.5 bg-white/90 backdrop-blur-xl rounded-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-lg transition"
-              />
-              <Mic className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            </div>
+            <GlobalSearchBar />
+          </motion.div>
+        )}
 
-            {/* Action Buttons */}
+        {/* Mobile Search Modal */}
+        <AnimatePresence>
+          {showMobileSearch && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 lg:hidden"
+              onClick={() => setShowMobileSearch(false)}
+            >
+              <motion.div
+                initial={{ y: -100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -100, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="absolute top-0 left-0 right-0 bg-white p-4 shadow-2xl"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setShowMobileSearch(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full transition"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  <h3 className="text-lg font-semibold">Search</h3>
+                </div>
+                <GlobalSearchBar />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Top Bar - Action Buttons */}
+        {currentUser && (
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="fixed top-2 sm:top-3 md:top-4 right-2 sm:right-3 md:right-4 z-40 flex items-center gap-1.5 sm:gap-2 md:gap-3"
+          >
+            {/* Waitlist Button - Blue */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => navigate('/governor/waitlist')}
+              className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+              title="Waitlist Dashboard"
+            >
+              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
+            </motion.button>
+
+            {/* Notifications Button - Magenta */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/notifications')}
-              className="p-3 bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+              className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-pink-500 to-pink-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+              title="Notifications"
             >
-              <Bell className="w-5 h-5" />
+              <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
             </motion.button>
 
+            {/* Social Profile Button - Green */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/settings')}
-              className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+              onClick={() => navigate(`/social-profile/${currentUser?.uid}`)}
+              className="p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+              title="Social Profile"
             >
-              <Settings className="w-5 h-5" />
+              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
             </motion.button>
 
+            {/* Search Button for Mobile */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/profile')}
-              className="p-3 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+              onClick={() => setShowMobileSearch(true)}
+              className="lg:hidden p-2 sm:p-2.5 md:p-3 bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
+              title="Search"
             >
-              <User className="w-5 h-5" />
+              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
             </motion.button>
 
+            {/* Logout Button - White */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleLogout}
-              className="p-3 bg-white/90 backdrop-blur-xl text-gray-700 rounded-full shadow-lg hover:shadow-xl transition-all"
+              className="p-2 sm:p-2.5 md:p-3 bg-white/90 backdrop-blur-xl text-gray-700 rounded-full shadow-lg hover:shadow-xl transition-all"
+              title="Logout"
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5" />
             </motion.button>
           </motion.div>
         )}

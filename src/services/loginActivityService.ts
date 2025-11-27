@@ -1,8 +1,9 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
+
 export interface LoginActivity {
   id?: string;
   userId: string;
-  timestamp: Timestamp;
+  timestamp: string;
   deviceType: string;
   browser: string;
   os: string;
@@ -15,10 +16,11 @@ export interface LoginActivity {
   userAgent: string;
   success: boolean;
 }
-const loginActivityCollection = 'loginActivity';
+
 export async function recordLoginActivity(userId: string, success: boolean = true) {
   const deviceInfo = getDeviceInfo();
   let ipInfo: { ip?: string; location?: any } = {};
+
   try {
     ipInfo = await Promise.race([
       getIPInfo(),
@@ -29,128 +31,186 @@ export async function recordLoginActivity(userId: string, success: boolean = tru
   } catch (error) {
     console.warn('Could not fetch IP info, continuing without it');
   }
-  const activity: Omit<LoginActivity, 'id'> = {
-    userId,
-    timestamp: Timestamp.now(),
-    deviceType: deviceInfo.deviceType,
+
+  const activity = {
+    user_id: userId,
+    timestamp: new Date().toISOString(),
+    device_type: deviceInfo.deviceType,
     browser: deviceInfo.browser,
     os: deviceInfo.os,
-    userAgent: navigator.userAgent,
-    ipAddress: ipInfo.ip || 'Unknown',
+    user_agent: navigator.userAgent,
+    ip_address: ipInfo.ip || 'Unknown',
     location: ipInfo.location || {},
     success,
   };
-  const docRef = await addDoc(collection(db, loginActivityCollection), activity);
-  return docRef.id;
+
+  const { data, error } = await supabase
+    .from('login_activity')
+    .insert(activity)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data.id;
 }
+
 export async function getUserLoginHistory(userId: string, limitCount: number = 10): Promise<LoginActivity[]> {
-  // First get login history from loginActivity collection
-  const q = query(
-    collection(db, loginActivityCollection),
-    where('userId', '==', userId),
-    orderBy('timestamp', 'desc'),
-    limit(limitCount)
-  );
-  const snapshot = await getDocs(q);
-  const activities = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LoginActivity));
-  // Also check user_points collection for last_login data
+  const { data, error } = await supabase
+    .from('login_activity')
+    .select('*')
+    .eq('user_id', userId)
+    .order('timestamp', { ascending: false })
+    .limit(limitCount);
+
+  if (error) throw error;
+
+  const activities = (data || []).map(row => ({
+    id: row.id,
+    userId: row.user_id,
+    timestamp: row.timestamp,
+    deviceType: row.device_type,
+    browser: row.browser,
+    os: row.os,
+    userAgent: row.user_agent,
+    ipAddress: row.ip_address,
+    location: row.location,
+    success: row.success
+  }));
+
   try {
-    const userPointsQuery = query(
-      collection(db, 'user_points'),
-      where('user_id', '==', userId),
-      limit(1)
-    );
-    const userPointsSnapshot = await getDocs(userPointsQuery);
-    if (!userPointsSnapshot.empty) {
-      const userPointsData = userPointsSnapshot.docs[0].data();
-      // If last_login exists and it's not already in activities, add it
-      if (userPointsData.last_login) {
-        const lastLoginTime = userPointsData.last_login;
-        const deviceInfo = getDeviceInfo();
-        // Check if this login is already recorded
-        const alreadyRecorded = activities.some(a =>
-          Math.abs(a.timestamp.toMillis() - lastLoginTime.toMillis()) < 60000 // within 1 minute
-        );
-        if (!alreadyRecorded) {
-          activities.unshift({
-            id: 'from_user_points',
-            userId,
-            timestamp: lastLoginTime,
-            deviceType: deviceInfo.deviceType,
-            browser: deviceInfo.browser,
-            os: deviceInfo.os,
-            userAgent: navigator.userAgent,
-            success: true
-          });
-        }
+    const { data: userPointsData } = await supabase
+      .from('user_points')
+      .select('last_login')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (userPointsData?.last_login) {
+      const lastLoginTime = new Date(userPointsData.last_login).getTime();
+      const deviceInfo = getDeviceInfo();
+
+      const alreadyRecorded = activities.some(a =>
+        Math.abs(new Date(a.timestamp).getTime() - lastLoginTime) < 60000
+      );
+
+      if (!alreadyRecorded) {
+        activities.unshift({
+          id: 'from_user_points',
+          userId,
+          timestamp: userPointsData.last_login,
+          deviceType: deviceInfo.deviceType,
+          browser: deviceInfo.browser,
+          os: deviceInfo.os,
+          userAgent: navigator.userAgent,
+          success: true
+        });
       }
     }
   } catch (error) {
     console.error('Error fetching from user_points:', error);
   }
+
   return activities.slice(0, limitCount);
 }
+
 export async function getRecentLogins(limitCount: number = 50): Promise<LoginActivity[]> {
-  const q = query(
-    collection(db, loginActivityCollection),
-    orderBy('timestamp', 'desc'),
-    limit(limitCount)
-  );
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LoginActivity));
+  const { data, error } = await supabase
+    .from('login_activity')
+    .select('*')
+    .order('timestamp', { ascending: false })
+    .limit(limitCount);
+
+  if (error) throw error;
+
+  return (data || []).map(row => ({
+    id: row.id,
+    userId: row.user_id,
+    timestamp: row.timestamp,
+    deviceType: row.device_type,
+    browser: row.browser,
+    os: row.os,
+    userAgent: row.user_agent,
+    ipAddress: row.ip_address,
+    location: row.location,
+    success: row.success
+  }));
 }
+
 export async function getFailedLoginAttempts(userId: string, since: Date): Promise<LoginActivity[]> {
-  const sinceTimestamp = Timestamp.fromDate(since);
-  const q = query(
-    collection(db, loginActivityCollection),
-    where('userId', '==', userId),
-    where('success', '==', false),
-    where('timestamp', '>=', sinceTimestamp),
-    orderBy('timestamp', 'desc')
-  );
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as LoginActivity));
+  const { data, error } = await supabase
+    .from('login_activity')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('success', false)
+    .gte('timestamp', since.toISOString())
+    .order('timestamp', { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map(row => ({
+    id: row.id,
+    userId: row.user_id,
+    timestamp: row.timestamp,
+    deviceType: row.device_type,
+    browser: row.browser,
+    os: row.os,
+    userAgent: row.user_agent,
+    ipAddress: row.ip_address,
+    location: row.location,
+    success: row.success
+  }));
 }
+
 export async function deleteLoginActivity(activityId: string) {
-  const docRef = doc(db, loginActivityCollection, activityId);
-  await deleteDoc(docRef);
+  const { error } = await supabase
+    .from('login_activity')
+    .delete()
+    .eq('id', activityId);
+
+  if (error) throw error;
 }
+
 export async function clearOldLoginActivity(userId: string, olderThanDays: number = 90) {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
-  const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
-  const q = query(
-    collection(db, loginActivityCollection),
-    where('userId', '==', userId),
-    where('timestamp', '<', cutoffTimestamp)
-  );
-  const snapshot = await getDocs(q);
-  const deletePromises = snapshot.docs.map((document) => deleteDoc(document.ref));
-  await Promise.all(deletePromises);
-  return snapshot.size;
+
+  const { data, error } = await supabase
+    .from('login_activity')
+    .delete()
+    .eq('user_id', userId)
+    .lt('timestamp', cutoffDate.toISOString())
+    .select('id');
+
+  if (error) throw error;
+  return data?.length || 0;
 }
+
 function getDeviceInfo() {
   const ua = navigator.userAgent;
   let deviceType = 'desktop';
+
   if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
     deviceType = 'tablet';
   } else if (/Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(ua)) {
     deviceType = 'mobile';
   }
+
   let browser = 'Unknown';
   if (ua.includes('Firefox')) browser = 'Firefox';
   else if (ua.includes('Chrome')) browser = 'Chrome';
   else if (ua.includes('Safari')) browser = 'Safari';
   else if (ua.includes('Edge')) browser = 'Edge';
   else if (ua.includes('Opera')) browser = 'Opera';
+
   let os = 'Unknown';
   if (ua.includes('Win')) os = 'Windows';
   else if (ua.includes('Mac')) os = 'macOS';
   else if (ua.includes('Linux')) os = 'Linux';
   else if (ua.includes('Android')) os = 'Android';
   else if (ua.includes('iOS')) os = 'iOS';
+
   return { deviceType, browser, os };
 }
+
 async function getIPInfo(): Promise<{ ip?: string; location?: any }> {
   try {
     const response = await fetch('https://api.ipify.org?format=json');

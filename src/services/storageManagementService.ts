@@ -1,4 +1,4 @@
-import { storage, db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export interface FileMetadata {
   id?: string;
   fileName: string;

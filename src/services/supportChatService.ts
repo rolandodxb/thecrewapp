@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export type Department = 'general' | 'technical' | 'billing' | 'courses' | 'recruitment' | 'other';
 export type Topic = 'account' | 'payment' | 'course_access' | 'bug_report' | 'feature_request' | 'complaint' | 'other';
 export interface SupportTicket {

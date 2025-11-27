@@ -1,4 +1,4 @@
-import { db, functions } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { MessageReport, Message } from './communityChatService';
 export interface ModerationAuditEntry {
   action: string;

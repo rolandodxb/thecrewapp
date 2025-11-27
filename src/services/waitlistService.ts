@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 export interface WaitlistEntry {
   id: string;

@@ -13,7 +13,7 @@
  * - User reactions to posts and comments
  * - Any other user interactions
  */
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 interface NotificationPayload {
   userId: string;
   title: string;

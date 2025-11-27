@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { openaiClient } from '../utils/openaiClient';
 export type ModerationCategory =
   | 'spam'

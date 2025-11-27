@@ -1,5 +1,5 @@
 import * as OTPAuth from 'otpauth';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import QRCode from 'qrcode';
 interface TOTPSecret {
   secret: string;

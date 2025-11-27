@@ -1,4 +1,4 @@
-import { db, storage } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export interface EnhancedMessage {
   id?: string;
   conversationId: string;

@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export type NotificationType =
   | 'system_update'
   | 'new_feature'

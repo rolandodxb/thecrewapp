@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import * as speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 export interface TwoFactorData {

@@ -16,7 +16,7 @@
  * Think of it as a "loyalty program" or "verified badge" system that REWARDS
  * good behavior, not a moderation system that RESTRICTS bad behavior.
  */
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { aiModerationService } from './aiModerationService';
 export interface UserReputation {
   userId: string;

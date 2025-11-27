@@ -1,4 +1,4 @@
-import { db, storage, auth, functions, supabase } from '../lib/auth';
+import { auth, supabase } from '../lib/auth';
 import { aiModerationService } from './aiModerationService';
 import { reputationService } from './reputationService';
 import { messageMentionsService } from './messageMentionsService';

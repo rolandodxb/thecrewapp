@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { createNotification } from './unifiedNotificationService';
 export type UpdateType = 'feature' | 'fix' | 'improvement' | 'announcement';
 export interface Update {

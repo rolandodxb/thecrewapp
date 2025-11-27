@@ -1,4 +1,4 @@
-import { db, auth, supabase } from '../lib/auth';
+import { auth, supabase } from '../lib/auth';
 import { notifyPostComment, notifyPostReaction, notifyCommentReply } from './comprehensiveNotificationService';
 import { aiModerationService } from './aiModerationService';
 import { reputationService } from './reputationService';

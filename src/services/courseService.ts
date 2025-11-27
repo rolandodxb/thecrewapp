@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { uploadPDFToStorage, deletePDFFromStorage } from './storageService';
 export const enrollInCourse = async (userId: string, courseId: string): Promise<void> => {
   const enrollmentRef = doc(db, 'course_enrollments', `${userId}_${courseId}`);

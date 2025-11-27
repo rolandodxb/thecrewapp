@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export interface ModuleEnrollment {
   user_id: string;
   module_id: string;

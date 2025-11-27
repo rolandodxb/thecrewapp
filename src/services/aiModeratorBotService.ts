@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { Message } from './communityChatService';
 import { aiModerationService } from './aiModerationService';
 const AI_MODERATOR_ID = 'ai-moderator-bot';

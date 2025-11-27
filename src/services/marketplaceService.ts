@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export interface MarketplaceProduct {
   id: string;
   seller_id: string;

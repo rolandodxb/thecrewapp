@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { aiModerationService } from './aiModerationService';
 export interface GroupMessage {
   id: string;

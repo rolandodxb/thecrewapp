@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export interface UserContext {
   userId: string;
   role: 'student' | 'coach' | 'mentor' | 'governor' | 'moderator';

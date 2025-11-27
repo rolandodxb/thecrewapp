@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export interface TwoFactorSettings {
   enabled: boolean;
   email: string;

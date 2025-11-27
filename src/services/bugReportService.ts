@@ -1,4 +1,4 @@
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { notifyBugReportComment, notifyBugReportStatus } from './notificationService';
 export type BugStatus = 'open' | 'in-progress' | 'escalated' | 'resolved' | 'closed';
 export type BugPriority = 'low' | 'medium' | 'high' | 'critical';

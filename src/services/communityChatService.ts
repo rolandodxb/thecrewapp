@@ -304,7 +304,7 @@ export const communityChatService = {
   async sendMessage(
     conversationId: string,
     content: string,
-    contentType: 'text' | 'image' | 'file' | 'voice' = 'text',
+    contentType: 'text' | 'image' | 'file' = 'text',
     attachmentFile?: File,
     replyTo?: string
   ): Promise<string> {

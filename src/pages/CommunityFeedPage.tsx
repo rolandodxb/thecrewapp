@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import PostCard from '../components/community/PostCard';
 import CreatePostModal from '../components/community/CreatePostModal';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import ModernDashboardLayout from '../components/layout/ModernDashboardLayout';
 
 type Channel = 'all' | 'announcements' | 'general' | 'study-room';
 type FilterType = 'all' | 'images' | 'my-posts';
@@ -25,11 +26,6 @@ const FILTERS = [
 
 export default function CommunityFeedPage() {
   const { currentUser } = useApp();
-
-  if (!currentUser) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
-
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChannel, setSelectedChannel] = useState<Channel>('all');
@@ -110,14 +106,17 @@ export default function CommunityFeedPage() {
 
   if (!currentUser) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-gray-500">Please log in to view the community feed</p>
-      </div>
+      <ModernDashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-gray-500">Please log in to view the community feed</p>
+        </div>
+      </ModernDashboardLayout>
     );
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <ModernDashboardLayout>
+      <div className="space-y-4 sm:space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div>
@@ -217,20 +216,21 @@ export default function CommunityFeedPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
               >
-                <PostCard post={post} currentUser={currentUser!} onDeleted={() => loadPosts(true)} />
+                <PostCard post={post} currentUser={currentUser} onDeleted={() => loadPosts(true)} />
               </motion.div>
             ))}
           </div>
         )}
 
-      {/* Load More Trigger */}
-      <div ref={observerTarget} className="h-10 flex items-center justify-center">
-        {loadingMore && (
-          <div className="flex items-center gap-2 text-gray-600">
-            <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-sm">Loading more posts...</span>
-          </div>
-        )}
+        {/* Load More Trigger */}
+        <div ref={observerTarget} className="h-10 flex items-center justify-center">
+          {loadingMore && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-sm">Loading more posts...</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Create Post Modal */}
@@ -245,6 +245,6 @@ export default function CommunityFeedPage() {
           />
         )}
       </AnimatePresence>
-    </div>
+    </ModernDashboardLayout>
   );
 }

@@ -71,9 +71,8 @@ export default function ModernSidebar() {
             { path: '/courses', icon: BookOpen, label: 'Courses' },
             { path: '/my-progress', icon: TrendingUp, label: 'My Progress' },
             { path: '/video-courses', icon: Video, label: 'Video Courses' },
-            { path: '/students', icon: Users, label: 'Students' },
             { path: '/ai-trainer', icon: Brain, label: 'AI Trainer', locked: !aiTrainerAccess.allowed, feature: 'ai-trainer' as Feature },
-            { path: '/open-day', icon: Plane, label: 'Simulator', locked: !simulatorAccess.allowed, feature: 'simulator' as Feature }
+            { path: '/open-day', icon: Plane, label: 'Open Day Simulator', locked: !simulatorAccess.allowed, feature: 'simulator' as Feature }
           ]
         },
         {
@@ -88,11 +87,9 @@ export default function ModernSidebar() {
           label: 'Community',
           items: [
             { path: '/community-feed', icon: Rss, label: 'Community Feed' },
-            { path: '/community', icon: MessageCircle, label: 'Community Chat', badge: 'NEW' },
-            { path: '/chat', icon: MessageCircle, label: 'Private Chat', locked: !chatAccess.allowed, feature: 'chat' as Feature },
-            { path: '/conferences', icon: Video, label: 'Conference Room', badge: 'NEW' },
-            { path: '/invite-friends', icon: UserPlus, label: 'Invite Friends' },
-            { path: '/leaderboard', icon: Trophy, label: 'Leaderboard' }
+            { path: '/chat', icon: MessageCircle, label: 'Chat', locked: !chatAccess.allowed, feature: 'chat' as Feature },
+            { path: '/conference', icon: Video, label: 'Conference Room', badge: 'NEW' },
+            { path: '/invite-friends', icon: UserPlus, label: 'Invite Friends' }
           ]
         },
         {
@@ -107,9 +104,9 @@ export default function ModernSidebar() {
         {
           label: 'Finances',
           items: [
-            { path: '/wallet', icon: Wallet, label: 'Wallet', badge: 'NEW' },
+            { path: '/wallet', icon: Wallet, label: 'My Wallet', badge: 'NEW' },
             { path: '/affiliate-dashboard', icon: LinkIcon, label: 'Affiliates', badge: 'NEW' },
-            { path: '/attendance', icon: ClipboardList, label: 'Attendance' }
+            { path: '/leaderboard', icon: Trophy, label: 'Leaderboard' }
           ]
         },
         {
@@ -159,7 +156,7 @@ export default function ModernSidebar() {
           label: 'Communication',
           items: [
             { path: '/chat', icon: MessageCircle, label: 'Chat' },
-            { path: '/conferences', icon: Video, label: 'Conference Room', badge: 'NEW' },
+            { path: '/conference', icon: Video, label: 'Conference Room', badge: 'NEW' },
             { path: '/community-feed', icon: Rss, label: 'Community' }
           ]
         },
@@ -232,7 +229,7 @@ export default function ModernSidebar() {
           label: 'Communication',
           items: [
             { path: '/chat', icon: MessageCircle, label: 'Chat' },
-            { path: '/conferences', icon: Video, label: 'Conference Room', badge: 'NEW' },
+            { path: '/conference', icon: Video, label: 'Conference Room', badge: 'NEW' },
             { path: '/support-chat-manager', icon: MessageCircle, label: 'Support Manager' }
           ]
         },
@@ -368,6 +365,11 @@ export default function ModernSidebar() {
         onClick={handleMenuClick}
         className="fixed top-2 sm:top-3 md:top-4 left-2 sm:left-3 md:left-4 z-50 flex items-center gap-1 sm:gap-1.5 md:gap-2 px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 bg-white/90 backdrop-blur-xl rounded-full shadow-lg hover:shadow-xl transition-all"
       >
+        <div className="flex items-center gap-1 sm:gap-1.5">
+          <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 bg-red-500 rounded-full"></div>
+          <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 bg-yellow-500 rounded-full"></div>
+          <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full"></div>
+        </div>
         <span className="text-xs sm:text-sm font-medium text-gray-700">Menu</span>
         <ChevronRight className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
       </motion.button>

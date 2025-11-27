@@ -1,32 +1,9 @@
-import { enableIndexedDbPersistence } from 'firebase/firestore';
-import { setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { db, auth } from '../lib/firebase';
-
 export async function enableOfflineSupport() {
-  try {
-    await enableIndexedDbPersistence(db);
-    console.log('✅ Firestore offline persistence enabled');
-  } catch (err: any) {
-    if (err.code === 'failed-precondition') {
-      console.warn('⚠️ Multiple tabs open, persistence can only be enabled in one tab at a time.');
-    } else if (err.code === 'unimplemented') {
-      console.warn('⚠️ The current browser does not support offline persistence');
-    } else {
-      console.error('Error enabling persistence:', err);
-    }
-  }
-
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-    console.log('✅ Auth persistence enabled');
-  } catch (err) {
-    console.error('Error setting auth persistence:', err);
-  }
+  console.log('✅ Supabase handles offline persistence automatically');
 }
 
 export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
-    // Check if we're in StackBlitz environment
     if (window.location.hostname.includes('stackblitz') || window.location.hostname.includes('webcontainer')) {
       console.log('⚠️ Service Worker not supported in StackBlitz environment');
       return;

@@ -5,7 +5,7 @@ import { courseExams } from '../data/examData';
 import ExamInterface from './ExamInterface';
 import ExamResultModal from './ExamResultModal';
 import { ExamResult } from '../services/examService';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 interface ModuleExamTriggerProps {
   userId: string;
   courseIds: string[];

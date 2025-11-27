@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export function useFirestoreCollection<T = DocumentData>(collectionName: string, constraints?: any[]) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);

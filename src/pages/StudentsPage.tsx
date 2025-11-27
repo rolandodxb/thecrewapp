@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Search, Mail, MapPin, Calendar, Award, BookOpen, TrendingUp, Filter } from 'lucide-react';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { useApp } from '../context/AppContext';
 interface Student {
   id: string;

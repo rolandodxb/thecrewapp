@@ -6,7 +6,7 @@ import InspectionProtection from '../components/InspectionProtection';
 import { useApp } from '../context/AppContext';
 import { getSellerOrders, Order } from '../services/orderService';
 import { formatPrice } from '../services/stripeService';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 interface Transaction {
   id: string;
   orderId: string;

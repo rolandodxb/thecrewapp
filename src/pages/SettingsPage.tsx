@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { User, Lock, Bell, Globe, Palette, Shield, Trash2, Mail, Camera, Save, Smartphone, Monitor, MapPin, Clock } from 'lucide-react';
-import { db, auth, supabase } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { countries } from '../data/countries';
 import { useNavigate } from 'react-router-dom';
 import TwoFactorSetup from '../components/TwoFactorSetup';

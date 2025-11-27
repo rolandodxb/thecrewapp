@@ -8,7 +8,7 @@ import CreateModuleForm from '../components/CreateModuleForm';
 import NewCourseForm from '../components/NewCourseForm';
 import { useApp } from '../context/AppContext';
 import { updateLastAccessed, isEnrolledInModule } from '../services/enrollmentService';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import ModuleExamTrigger from '../components/ModuleExamTrigger';
 export default function MainModuleViewerPage() {
   const { moduleId } = useParams<{ moduleId: string }>();

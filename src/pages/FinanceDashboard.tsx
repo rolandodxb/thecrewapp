@@ -3,7 +3,7 @@ import { DollarSign, TrendingUp, TrendingDown, Users, Package, CreditCard, Downl
 import { motion } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { formatPrice } from '../services/stripeService';
 interface RevenueData {
   totalRevenue: number;

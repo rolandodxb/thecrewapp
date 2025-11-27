@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Shield, AlertCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import InspectionProtection from '../../components/InspectionProtection';
-import { db } from '../../lib/auth';
+import { supabase } from '../../lib/auth';
 import MetricsCards from '../../components/governor/nexus/MetricsCards';
 import CommandConsole from '../../components/governor/nexus/CommandConsole';
 import BackupControl from '../../components/governor/nexus/BackupControl';

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { User as UserType } from '../../context/AppContext';
 import { Search, Ban, Volume2, VolumeX, TrendingUp, TrendingDown, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { db } from '../../lib/auth';
+import { supabase } from '../../lib/auth';
 export default function UsersControl() {
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);

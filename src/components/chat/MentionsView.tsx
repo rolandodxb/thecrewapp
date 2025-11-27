@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, MessageCircle, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '../../lib/auth';
+import { supabase } from '../../lib/auth';
 import { useNavigate } from 'react-router-dom';
 interface Mention {
   id: string;

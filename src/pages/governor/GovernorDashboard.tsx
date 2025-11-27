@@ -2,7 +2,7 @@ import { Activity, Users, BookOpen, MessageCircle, TrendingUp, AlertCircle, Shie
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { db } from '../../lib/auth';
+import { supabase } from '../../lib/auth';
 import { getAllCourses } from '../../services/courseService';
 interface DashboardMetrics {
   activeUsers: number;

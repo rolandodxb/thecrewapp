@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp, ArrowDown } from 'lucide-react';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 interface SubscriptionCancellationProps {
   userId: string;

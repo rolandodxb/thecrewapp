@@ -3,7 +3,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Plane, User, Mail, Lock, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { auth, db } from '../../lib/auth';
+import { supabase } from '../../lib/auth';
 import { countries } from '../../data/countries';
 import { supabase } from '../../lib/supabase';
 import { referralService } from '../../services/referralService';

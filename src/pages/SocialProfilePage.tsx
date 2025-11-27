@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { communityFeedService, CommunityPost } from '../services/communityFeedService';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { Award, BookOpen, Trophy, Grid3x3, Lock, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';

@@ -3,7 +3,7 @@ import { Trophy, Medal, Award, TrendingUp, Shield, AlertTriangle, Mail, Star } f
 import { motion } from 'framer-motion';
 import { getLeaderboard, UserPoints } from '../services/rewardsService';
 import BadgeDisplay from '../components/BadgeDisplay';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { useNavigate } from 'react-router-dom';
 interface UserWithDetails extends UserPoints {
   userName: string;

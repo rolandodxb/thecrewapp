@@ -2,7 +2,7 @@ import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, MessageCircle, Users, TrendingUp, Award, GraduationCap, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import { getUserEnrollments } from '../services/courseService';
 import { getUserPoints } from '../services/rewardsService';
 import EmptyState from '../components/EmptyState';

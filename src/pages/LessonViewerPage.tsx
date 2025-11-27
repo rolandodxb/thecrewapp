@@ -4,7 +4,7 @@ import { ArrowLeft, CheckCircle, Clock, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import { registerLessonView, getLessonProgress } from '../services/progressService';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 interface Lesson {
   id: string;
   title: string;

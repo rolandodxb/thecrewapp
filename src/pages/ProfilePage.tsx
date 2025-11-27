@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Camera, MapPin, Mail, Shield, Save, Upload, FileText, Download, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import CVAnalyzer from '../components/CVAnalyzer';
 import DeclareCrewButton from '../components/DeclareCrewButton';
 import SubscriptionCancellation from '../components/SubscriptionCancellation';

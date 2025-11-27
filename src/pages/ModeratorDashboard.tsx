@@ -3,7 +3,7 @@ import { Shield, AlertTriangle, CheckCircle, XCircle, Flag, MessageCircle, Users
 import { motion } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 interface ModerationLog {
   id: string;
   userId: string;

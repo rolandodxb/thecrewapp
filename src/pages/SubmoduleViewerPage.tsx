@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import NewCourseForm from '../components/NewCourseForm';
 import { useApp } from '../context/AppContext';
 import { updateLastAccessed, isEnrolledInModule } from '../services/enrollmentService';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 export default function SubmoduleViewerPage() {
   const { submoduleId } = useParams<{ submoduleId: string }>();
   const navigate = useNavigate();

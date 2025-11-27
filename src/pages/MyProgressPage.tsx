@@ -12,7 +12,7 @@ import {
 } from '../services/enrollmentService';
 import { getMainModule, getSubmodule, getAllMainModules } from '../services/mainModuleService';
 import { calculateModuleProgress, getUserEnrollments as getCourseEnrollments } from '../services/courseService';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 interface EnrolledItem {
   id: string;
   title: string;

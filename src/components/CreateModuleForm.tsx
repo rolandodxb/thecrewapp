@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Upload, FolderPlus, Image as ImageIcon, Check, Plus, Trash2, Edit } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 import {
   createMainModule,
   createSubmodule,

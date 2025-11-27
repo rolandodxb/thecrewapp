@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent, ChangeEvent } from 'react';
-import { db } from '../../lib/auth';
+import { supabase } from '../../lib/auth';
 import { User, AtSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 interface UserProfile {

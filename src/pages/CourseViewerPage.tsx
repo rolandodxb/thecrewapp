@@ -12,7 +12,7 @@ import FeatureAccessGuard from '../components/FeatureAccessGuard';
 import CourseExamInterface from '../components/CourseExamInterface';
 import ExamResultModal from '../components/ExamResultModal';
 import { AnimatePresence } from 'framer-motion';
-import { db } from '../lib/auth';
+import { supabase } from '../lib/auth';
 function CourseViewerPageContent() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
